@@ -43,15 +43,19 @@ Alle Schnittstellen → `Memory`-Fassade (`src/core.ts`) → Retrieval/Learning 
 7. **Tests laufen Single-Process** (`--test-isolation=none`): mehrere Prozesse, die onnxruntime separat initialisieren, lassen die native Lib intermittierend abstürzen. NICHT auf prozess-pro-Datei zurückstellen.
 8. Marker-Syntax: `ADR:/DECISION:`, `FINDING[sev]:`, `LEARNED:/ERFAHRUNG:`, `RULE:/REGEL:`, `NOTE:/WISSEN:` (Trenner `|` bzw. `->`).
 
+## §16 Performance — ERLEDIGT
+Benchmark @102k Nodes + 30k Edges: `search()` median **82 ms** (Ziel ≤100 ms).
+Umgesetzt: (a) Traversal gebündelt (label-loses `MATCH (a)-[]-(b) WHERE a.id IN $ids`, je 1 Query statt N+1); (b) schlanke Suche — der Cosine-Scan liefert nur `id` + Ranking-Felder, Render-Felder werden per `hydrate()` nur für die finale Top-N nachgeladen (377→82 ms-Pfad: voller Knoten pro Scan-Treffer kostete ~22 ms extra); (c) `bumpUsage` gebündelt.
+**Vektorindex bewusst NICHT verwendet:** Benchmark zeigte HNSW 9 ms vs. schlanke Brute-Force 15 ms (single-label@100k) — ~6 ms Gewinn, aber 69 s Bulk-Build + ~6 ms/Insert Schreib-Strafe + Betriebskomplexität. Lohnt erst bei Millionen Nodes; dann `CREATE_VECTOR_INDEX`/`QUERY_VECTOR_INDEX` (in Kuzu 0.11 verfügbar, bulk-build NACH dem Laden) erwägen.
+
 ## Offene PRD-Punkte (Priorität absteigend)
 1. **§9 Intent Analysis** fehlt — Prompt wird direkt eingebettet, ohne Absichts-/Themenklassifikation.
-2. **§16 Performance @ Skala unverifiziert** — Retrieval macht N+1-Queries pro Kandidat (`src/retrieval/search.ts`, `expand`/`scoreGraphConnections`). Bei 100k+ Nodes/1M+ Edges vermutlich zu langsam. Lösung: nativer HNSW-Vektorindex (`CREATE_VECTOR_INDEX`/`QUERY_VECTOR_INDEX`, in Kuzu 0.11 verfügbar) + Batch-Traversal statt Schleifen.
-3. **§17 Verschlüsselbarer Speicher** — keine Verschlüsselung implementiert (Rest von §17 erfüllt).
-4. **§15 `embedding_version`** — nur `embedding` + `embeddingModel` gespeichert; Versionsfeld fehlt.
-5. **§12 semantisches Zusammenführen ähnlicher Findings** — aktuell nur zeilenbasiertes Dedup.
+2. **§17 Verschlüsselbarer Speicher** — keine Verschlüsselung implementiert (Rest von §17 erfüllt).
+3. **§15 `embedding_version`** — nur `embedding` + `embeddingModel` gespeichert; Versionsfeld fehlt.
+4. **§12 semantisches Zusammenführen ähnlicher Findings** — aktuell nur zeilenbasiertes Dedup.
 
 ## Nächster sinnvoller Schritt
-Punkt #2 (Skalierung via Vektorindex) bringt den größten Nutzen für reale Repos — die Brute-Force-Pfade in `search.ts` durch `QUERY_VECTOR_INDEX` ersetzen und Traversal batchen. Davor mit einem Lasttest (synthetische 100k Nodes) den Ist-Zustand messen.
+§9 Intent-Analyse: vor dem Einbetten den Prompt grob klassifizieren (z.B. „braucht Findings/Decisions/Architektur?") und die Suche/Priorisierung danach gewichten. Klein & wirkungsvoll. Danach §15 (`embedding_version`, trivial) und §12 (semantisches Finding-Merging).
 
 ## Git
 - `dev` lokal = `65e0f05`, eine Commit vor `origin/dev`/`origin/main` (`9777f6b`).
