@@ -31,6 +31,8 @@ test("upsert + getNode round-trips a Decision with embedding", async () => {
   assert.equal(node!.title, "Use Kuzu for the graph store");
   assert.ok(Array.isArray(node!.embedding), "embedding stored");
   assert.equal((node!.embedding as number[]).length, 384);
+  assert.equal(node!.embeddingModel, "Xenova/bge-small-en-v1.5", "embedding model recorded (PRD §15)");
+  assert.equal(node!.embeddingVersion, "1", "embedding version recorded (PRD §15)");
 });
 
 test("semantic search ranks the relevant node first", async () => {

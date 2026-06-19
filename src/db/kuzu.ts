@@ -1,6 +1,6 @@
 import * as kuzu from "kuzu";
 import { dbPath, ensureDir, resolveStorageDir } from "../config.js";
-import { ALL_DDL } from "./schema.js";
+import { ALL_DDL, MIGRATIONS } from "./schema.js";
 
 /**
  * Thin async wrapper around the Kuzu embedded graph database.
@@ -41,10 +41,17 @@ export class GraphDB {
     return g;
   }
 
-  /** Run all DDL idempotently. */
+  /** Run all DDL idempotently, then apply column migrations for older DBs. */
   async migrate(): Promise<void> {
     for (const ddl of ALL_DDL) {
       await this.run(ddl);
+    }
+    for (const stmt of MIGRATIONS) {
+      try {
+        await this.run(stmt);
+      } catch {
+        // Best-effort: a missing table (never created) or unsupported clause is non-fatal.
+      }
     }
   }
 
