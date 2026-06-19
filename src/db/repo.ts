@@ -106,15 +106,13 @@ export class Repository {
     await this.db.query(cypher, { fromId, toId });
   }
 
-  /** Increment usageCount for a knowledge node (PRD §10 usage signal). */
+  /** Increment usageCount for knowledge nodes (PRD §10 usage signal). Batched. */
   async bumpUsage(label: NodeLabel, ids: string[]): Promise<void> {
     if (!KNOWLEDGE_SET.has(label) || ids.length === 0) return;
-    for (const id of ids) {
-      await this.db.query(
-        `MATCH (n:${label} {id: $id}) SET n.usageCount = coalesce(n.usageCount, 0) + 1;`,
-        { id },
-      );
-    }
+    await this.db.query(
+      `UNWIND $ids AS id MATCH (n:${label} {id: id}) SET n.usageCount = coalesce(n.usageCount, 0) + 1;`,
+      { ids },
+    );
   }
 
   /** All nodes of a label with their props (used by brute-force semantic search). */
