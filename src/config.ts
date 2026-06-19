@@ -39,9 +39,14 @@ export function dbPath(storageDir: string): string {
   return join(storageDir, "graph.kuzu");
 }
 
-/** Where embedding models are cached (kept local, never re-downloaded). */
+/**
+ * Where embedding models are cached. Intentionally GLOBAL (a fixed home dir),
+ * decoupled from BRAIN_HOME: the model is large and shared across every
+ * project/store, so a custom or throwaway BRAIN_HOME must not trigger a
+ * re-download. Override only via BRAIN_MODEL_CACHE.
+ */
 export function modelCacheDir(): string {
-  return process.env.BRAIN_MODEL_CACHE ?? join(process.env.BRAIN_HOME ?? join(homedir(), ".claude-memory"), "models");
+  return process.env.BRAIN_MODEL_CACHE ?? join(homedir(), ".claude-memory", "models");
 }
 
 export function ensureDir(dir: string): string {

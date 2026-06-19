@@ -64,8 +64,13 @@ and caches it. Set `BRAIN_OFFLINE=1` afterwards to forbid any network access.
 The repo is a ready Claude Code plugin:
 
 - `.claude-plugin/plugin.json` — manifest
-- `hooks/hooks.json` — registers the `UserPromptSubmit` hook (retrieval before every prompt)
-- `.mcp.json` — registers the `the-brain` MCP server (9 tools)
+- `hooks/hooks.json` — registers two hooks:
+  - `UserPromptSubmit` → retrieval before every prompt (`dist/hooks/inject.js`)
+  - `Stop` → automatic learning after every response (`dist/hooks/learn.js`): the
+    last assistant turn is scanned for ADR/FINDING/LEARNED/RULE/NOTE markers and
+    persisted (PRD §14). Stable ids make this idempotent; recurring review
+    findings accumulate `frequency` (PRD §13).
+- `.mcp.json` — registers the `the-brain` MCP server (10 tools)
 
 After `npm run build`, point Claude Code at this directory as a plugin. The MCP
 tools and the prompt hook become available automatically.
