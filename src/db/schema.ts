@@ -13,8 +13,8 @@ import { EMBEDDING_DIM } from "../config.js";
 
 const E = `FLOAT[${EMBEDDING_DIM}]`;
 
-/** Common ranking/embedding columns appended to knowledge nodes. */
-const RANK = `embedding ${E}, embeddingModel STRING, importance DOUBLE, usageCount INT64, createdAt TIMESTAMP, updatedAt TIMESTAMP`;
+/** Common ranking/embedding columns appended to knowledge nodes (PRD §10, §15). */
+const RANK = `embedding ${E}, embeddingModel STRING, embeddingVersion STRING, importance DOUBLE, usageCount INT64, createdAt TIMESTAMP, updatedAt TIMESTAMP`;
 
 export const NODE_TABLES: string[] = [
   `CREATE NODE TABLE IF NOT EXISTS Project(
@@ -90,3 +90,23 @@ export const REL_TABLES: string[] = [
 ];
 
 export const ALL_DDL: string[] = [...NODE_TABLES, ...REL_TABLES];
+
+/** Knowledge-bearing labels that carry the embedding/ranking columns. */
+const KNOWLEDGE_TABLES = [
+  "Component",
+  "Knowledge",
+  "Decision",
+  "Experience",
+  "ReviewFinding",
+  "CodingStandard",
+  "Problem",
+];
+
+/**
+ * Idempotent column migrations for databases created by an earlier schema.
+ * `ADD IF NOT EXISTS` is a no-op when the column already exists, so this is
+ * safe to run on every open.
+ */
+export const MIGRATIONS: string[] = KNOWLEDGE_TABLES.map(
+  (t) => `ALTER TABLE ${t} ADD IF NOT EXISTS embeddingVersion STRING`,
+);

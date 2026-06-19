@@ -2,6 +2,7 @@ import { GraphDB } from "../db/kuzu.js";
 import { embed } from "../embeddings/embedder.js";
 import { KNOWLEDGE_LABELS, type NodeLabel, type ScoredNode } from "../types.js";
 import { combine, type Signals } from "./ranking.js";
+import { analyzeIntent } from "./intent.js";
 
 /**
  * Retrieval pipeline (PRD §9):
@@ -42,6 +43,12 @@ export class SearchEngine {
   async search(query: string, opts: SearchOptions = {}): Promise<ScoredNode[]> {
     const limit = opts.limit ?? 20;
     const seedPerLabel = opts.seedPerLabel ?? 8;
+
+    // 0. Intent analysis (PRD §9): classify the prompt before embedding so we
+    //    can widen retrieval for the relevant kinds of memory and nudge ranking.
+    const intent = analyzeIntent(query);
+    const focused = new Set(intent.focus);
+
     const qvec = await embed(query);
 
     // 1. Semantic search per knowledge label (in-DB cosine). Only the id +
@@ -50,7 +57,9 @@ export class SearchEngine {
     //    render fields are needed only for the final slice (hydrated in step 5).
     const byId = new Map<string, Candidate>();
     for (const label of KNOWLEDGE_LABELS) {
-      const rows = await this.semanticByLabel(label, qvec, seedPerLabel);
+      // Focused labels get more retrieval breadth.
+      const k = focused.has(label) ? seedPerLabel * 2 : seedPerLabel;
+      const rows = await this.semanticByLabel(label, qvec, k);
       for (const row of rows) {
         const id = String(row.id);
         byId.set(`${label}:${id}`, {
@@ -84,13 +93,15 @@ export class SearchEngine {
         updatedAt: (c.props.updatedAt as string | Date | undefined) ?? (c.props.createdAt as string | Date | undefined),
       };
       const b = combine(signals, { now, maxConnections, maxUsage });
+      // Intent nudge (PRD §9): small additive boost for the prompt's focus labels.
+      const score = b.score + (intent.boost[c.label] ?? 0);
       // Drop the embedding from the surfaced props — large and never needed downstream.
       const { embedding: _omit, ...props } = c.props;
       return {
         label: c.label,
         id: c.id,
         props,
-        score: b.score,
+        score,
         breakdown: { semantic: b.semantic, graph: b.graph, importance: b.importance, usage: b.usage, recency: b.recency },
       };
     });
