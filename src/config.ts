@@ -1,0 +1,50 @@
+import { homedir } from "node:os";
+import { join, basename, resolve } from "node:path";
+import { mkdirSync, existsSync } from "node:fs";
+
+/**
+ * Central configuration for the memory system.
+ *
+ * Security (PRD §17): everything stays local. No telemetry, no cloud.
+ * Storage layout (PRD §18):
+ *   - global default: ~/.claude-memory/<project-slug>/
+ *   - project-local:  <project>/.project-memory/   (when BRAIN_PROJECT_LOCAL=1)
+ */
+
+export const EMBEDDING_MODEL = process.env.BRAIN_EMBEDDING_MODEL ?? "Xenova/bge-small-en-v1.5";
+export const EMBEDDING_DIM = Number(process.env.BRAIN_EMBEDDING_DIM ?? 384);
+
+/** Token budget for the assembled context (PRD §12). Rough char≈token/4 heuristic. */
+export const CONTEXT_TOKEN_BUDGET = Number(process.env.BRAIN_TOKEN_BUDGET ?? 1500);
+
+/** GraphQL server port. */
+export const GRAPHQL_PORT = Number(process.env.BRAIN_GRAPHQL_PORT ?? 4123);
+
+function slug(p: string): string {
+  return basename(p).replace(/[^a-zA-Z0-9._-]/g, "_") || "default";
+}
+
+/** Resolve the directory where the Kuzu database for a given project lives. */
+export function resolveStorageDir(projectPath: string = process.cwd()): string {
+  const abs = resolve(projectPath);
+  if (process.env.BRAIN_PROJECT_LOCAL === "1") {
+    return join(abs, ".project-memory");
+  }
+  const base = process.env.BRAIN_HOME ?? join(homedir(), ".claude-memory");
+  return join(base, slug(abs));
+}
+
+/** Path to the Kuzu database directory inside a storage dir. */
+export function dbPath(storageDir: string): string {
+  return join(storageDir, "graph.kuzu");
+}
+
+/** Where embedding models are cached (kept local, never re-downloaded). */
+export function modelCacheDir(): string {
+  return process.env.BRAIN_MODEL_CACHE ?? join(process.env.BRAIN_HOME ?? join(homedir(), ".claude-memory"), "models");
+}
+
+export function ensureDir(dir: string): string {
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  return dir;
+}

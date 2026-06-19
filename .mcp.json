@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "the-brain": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js"]
+    }
+  }
+}
