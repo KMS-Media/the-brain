@@ -2,6 +2,9 @@ node_modules/
 dist/
 *.log
 .DS_Store
+# IDE
+.idea/
+.vscode/
 .cache/
 .models/
 # local memory store (never commit user data)
