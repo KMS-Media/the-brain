@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { GraphDB } from "./kuzu.js";
 import { embed, EMBEDDING_MODEL_NAME } from "../embeddings/embedder.js";
+import { EMBEDDING_VERSION } from "../config.js";
 import { KNOWLEDGE_LABELS, type NodeLabel } from "../types.js";
 
 /**
@@ -63,6 +64,7 @@ export class Repository {
     if (isKnowledge) {
       data.embedding = await embed(embedText(label, data));
       data.embeddingModel = EMBEDDING_MODEL_NAME;
+      data.embeddingVersion = EMBEDDING_VERSION;
       data.importance ??= 0.5;
       data.usageCount ??= 0;
     }

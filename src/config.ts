@@ -13,6 +13,8 @@ import { mkdirSync, existsSync } from "node:fs";
 
 export const EMBEDDING_MODEL = process.env.BRAIN_EMBEDDING_MODEL ?? "Xenova/bge-small-en-v1.5";
 export const EMBEDDING_DIM = Number(process.env.BRAIN_EMBEDDING_DIM ?? 384);
+/** Embedding scheme version (PRD §15). Bump when model/preprocessing changes so stale vectors can be re-embedded. */
+export const EMBEDDING_VERSION = process.env.BRAIN_EMBEDDING_VERSION ?? "1";
 
 /** Token budget for the assembled context (PRD §12). Rough char≈token/4 heuristic. */
 export const CONTEXT_TOKEN_BUDGET = Number(process.env.BRAIN_TOKEN_BUDGET ?? 1500);
