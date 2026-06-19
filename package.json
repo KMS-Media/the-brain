@@ -1,0 +1,44 @@
+{
+  "name": "the-brain",
+  "version": "0.1.0",
+  "description": "Local persistent memory plugin for Claude Code — graph-backed project knowledge, decisions, review findings and experiences.",
+  "type": "module",
+  "bin": {
+    "brain": "./dist/bin/brain.js"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx",
+    "mcp": "tsx src/mcp/server.ts",
+    "serve": "tsx src/graphql/server.ts",
+    "test": "node --import tsx --test test/**/*.test.ts",
+    "brain": "tsx src/bin/brain.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.0.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "graphql": "^16.9.0",
+    "graphql-scalars": "^1.23.0",
+    "graphql-yoga": "^5.0.0",
+    "kuzu": "^0.11.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "kuzu@0.11.3": true,
+    "onnxruntime-node@1.21.0": true,
+    "protobufjs@7.6.4": true,
+    "sharp@0.34.5": true
+  }
+}
