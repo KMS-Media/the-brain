@@ -18,9 +18,30 @@ const PRIORITY: NodeLabel[] = [
   "Problem",
 ];
 
+/** Word-set Jaccard above this counts two rendered lines as the same insight. */
+const SIMILARITY_THRESHOLD = 0.6;
+
 /** ~4 chars per token heuristic for budget enforcement. */
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
+}
+
+/** Normalized set of significant words (drops punctuation and 1-char tokens). */
+function wordSet(line: string): Set<string> {
+  return new Set(
+    line
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 1),
+  );
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const x of a) if (b.has(x)) inter++;
+  return inter / (a.size + b.size - inter);
 }
 
 /** One-line rendering of a node for the context block. */
@@ -64,16 +85,21 @@ export interface BuildResult {
 }
 
 export function buildContext(query: string, ranked: ScoredNode[], tokenBudget = CONTEXT_TOKEN_BUDGET): BuildResult {
-  // 1. Deduplicate by normalized rendered line (merge near-identical findings).
-  const seen = new Set<string>();
-  const deduped: ScoredNode[] = [];
+  // 1. Merge similar findings (PRD §12). `ranked` is sorted by score desc, so
+  //    we keep the highest-scored item and drop later ones whose rendered line
+  //    is near-identical (word-set Jaccard ≥ threshold) within the same label.
+  //    This catches re-phrasings ("missing input validation" vs "input
+  //    validation is missing") that exact-string dedup would miss.
+  const kept: { node: ScoredNode; tokens: Set<string> }[] = [];
   for (const n of ranked) {
     const line = renderLine(n);
-    const key = `${n.label}|${line.toLowerCase().slice(0, 120)}`;
-    if (seen.has(key) || !line.trim()) continue;
-    seen.add(key);
-    deduped.push(n);
+    if (!line.trim()) continue;
+    const tokens = wordSet(line);
+    const dup = kept.some((k) => k.node.label === n.label && jaccard(k.tokens, tokens) >= SIMILARITY_THRESHOLD);
+    if (dup) continue;
+    kept.push({ node: n, tokens });
   }
+  const deduped = kept.map((k) => k.node);
 
   // 2. Group by label, then walk in priority order; enforce token budget.
   const grouped = new Map<NodeLabel, ScoredNode[]>();
