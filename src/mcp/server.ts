@@ -134,6 +134,20 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
   );
 
   server.registerTool(
+    "ingest_repository",
+    {
+      title: "Ingest repository structure",
+      description: "Scan the project's git work tree into the graph: Project, Directory and File nodes with CONTAINS edges, plus recent GitCommit nodes with MODIFIES edges. Run once per project and after large changes.",
+      inputSchema: { gitLimit: z.number().optional().describe("How many recent commits to ingest (default 100)") },
+    },
+    async ({ gitLimit }) => {
+      const { ingest } = await import("../ingest/index.js");
+      const res = await ingest(memory, projectPath, gitLimit ?? 100);
+      return text(res);
+    },
+  );
+
+  server.registerTool(
     "learn_from_text",
     {
       title: "Extract and store knowledge from text",

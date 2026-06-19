@@ -72,7 +72,7 @@ tools and the prompt hook become available automatically.
 
 **MCP tools:** `memory_context`, `memory_search`, `memory_component`,
 `remember_decision`, `remember_experience`, `remember_review_finding`,
-`remember_knowledge`, `remember_standard`, `learn_from_text`.
+`remember_knowledge`, `remember_standard`, `ingest_repository`, `learn_from_text`.
 
 ## Use from the CLI
 
@@ -80,6 +80,7 @@ tools and the prompt hook become available automatically.
 npm run build
 node dist/bin/brain.js init                       # create the graph for this project
 node dist/bin/brain.js learn "FINDING[high]: SQL injection -> use params"
+node dist/bin/brain.js ingest                     # scan repo structure + git history into the graph
 node dist/bin/brain.js query "building the search endpoint"   # prints the context block
 node dist/bin/brain.js search "authentication"    # ranked hits as JSON
 node dist/bin/brain.js component "UserService"    # component view
@@ -129,6 +130,13 @@ Decision, Experience, ReviewFinding, CodingStandard, Problem) and the full
 relationship set from PRD §7 (`CONTAINS`, `USES`, `CALLS`, `DEPENDS_ON`,
 `AFFECTS`, `REPLACES`, `IMPLEMENTS`, `VIOLATES`, `SOLVES`, `RELATES_TO`,
 `MODIFIES`, `FIXES`). See `src/db/schema.ts`.
+
+**Structural auto-ingestion** (`brain ingest` / `ingest_repository`) populates the
+structural half automatically: `Project`, `Directory` and `File` nodes from
+`git ls-files` (so `.gitignore` is honored, checksums are git blob hashes), plus
+recent `GitCommit` nodes with `MODIFIES` edges from `git log`. See `src/ingest/`.
+Components are still captured manually / via the extractor — auto-detecting
+architectural components from code is intentionally out of MVP scope.
 
 ## Tests
 
