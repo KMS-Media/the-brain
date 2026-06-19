@@ -143,11 +143,24 @@ recent `GitCommit` nodes with `MODIFIES` edges from `git log`. See `src/ingest/`
 Components are still captured manually / via the extractor — auto-detecting
 architectural components from code is intentionally out of MVP scope.
 
+## Performance (PRD §16)
+
+Benchmarked at **102k nodes + 30k edges**: `search()` runs in **~82 ms median**
+(target ≤100 ms). Achieved by a lean semantic scan (the in-DB cosine scan
+returns only `id` + ranking columns; full render fields are hydrated for the
+final slice only) and batched graph traversal (one label-less
+`MATCH (a)-[]-(b) WHERE a.id IN $ids` query each, not one per candidate).
+
+The native Kuzu HNSW vector index is deliberately **not** used: benchmarks
+showed it only ~6 ms faster at 100k while making writes ~10× slower (index
+maintenance per insert) — it only pays off at millions of nodes.
+
 ## Tests
 
 ```bash
-npm test    # 16 tests: core round-trips, semantic search, prioritization,
-            # component traversal, ranking formula, extractor
+npm test    # 25 tests, single-process; core round-trips, semantic search,
+            # prioritization, component traversal, ranking, extractor, ingest,
+            # auto-learning hook
 ```
 
 ## Security (PRD §17)
