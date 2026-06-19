@@ -55,6 +55,19 @@ async function main() {
       mem.close();
       break;
     }
+    case "ingest": {
+      const { ingest } = await import("../ingest/index.js");
+      const mem = await Memory.open();
+      const limit = Number(rest[0]) || 100;
+      const res = await ingest(mem, process.cwd(), limit);
+      console.log(
+        `Ingested project "${res.structure.project}": ` +
+          `${res.structure.files} files, ${res.structure.directories} directories, ` +
+          `${res.git.commits} commits, ${res.git.edges} commit→file edges.`,
+      );
+      mem.close();
+      break;
+    }
     case "serve": {
       const { startGraphQLServer } = await import("../graphql/server.js");
       const { port } = await startGraphQLServer();
@@ -94,6 +107,7 @@ async function main() {
           '  search "<text>"      print ranked hits (JSON)',
           '  component "<name>"   print a component view (JSON)',
           '  learn "<text>"       extract & store knowledge (markers: ADR/FINDING/LEARNED/RULE/NOTE)',
+          "  ingest [gitLimit]    scan repo structure (files/dirs) + git history into the graph",
           "  serve                start the GraphQL server",
           "  mcp                  start the MCP stdio server",
           "  backup [destDir]     copy the graph DB to a backup directory",
