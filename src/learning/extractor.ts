@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Memory } from "../core.js";
 import type { NodeLabel } from "../types.js";
 
@@ -46,6 +47,32 @@ const PATTERNS: { label: NodeLabel; re: RegExp; build: (m: RegExpMatchArray) => 
   },
 ];
 
+/** The identifying field per label, used to build a stable dedup key. */
+function dedupKey(label: NodeLabel, p: Record<string, unknown>): string {
+  const s = (v: unknown) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  switch (label) {
+    case "ReviewFinding":
+      return s(p.rule);
+    case "Experience":
+      return `${s(p.problem)}->${s(p.solution)}`;
+    case "CodingStandard":
+    case "Component":
+      return s(p.name);
+    default:
+      return s(p.title);
+  }
+}
+
+/**
+ * Deterministic id from label + identifying text. Two identical findings
+ * (e.g. emitted in different sessions) collapse onto the same node, so the
+ * auto-learn loop never produces duplicates and frequency can accumulate.
+ */
+function stableId(label: NodeLabel, props: Record<string, unknown>): string {
+  const hash = createHash("sha1").update(`${label}\n${dedupKey(label, props)}`).digest("hex").slice(0, 16);
+  return `${label.toLowerCase()}:${hash}`;
+}
+
 /** Parse text into structured items without writing anything. */
 export function extract(text: string): ExtractedItem[] {
   const items: ExtractedItem[] = [];
@@ -54,6 +81,7 @@ export function extract(text: string): ExtractedItem[] {
     for (const m of text.matchAll(re)) {
       const props = build(m);
       if (Object.values(props).some((v) => typeof v === "string" && v.length > 0)) {
+        props.id = stableId(label, props);
         items.push({ label, props });
       }
     }
@@ -61,11 +89,19 @@ export function extract(text: string): ExtractedItem[] {
   return items;
 }
 
-/** Extract and persist; returns the ids of created/updated nodes. */
+/**
+ * Extract and persist; returns the ids of created/updated nodes. Stable ids
+ * make this idempotent. Recurring review findings accumulate `frequency`
+ * (PRD §13) instead of duplicating.
+ */
 export async function learn(memory: Memory, text: string): Promise<{ label: NodeLabel; id: string }[]> {
   const items = extract(text);
   const created: { label: NodeLabel; id: string }[] = [];
   for (const item of items) {
+    if (item.label === "ReviewFinding") {
+      const existing = await memory.repo.getNode("ReviewFinding", item.props.id as string);
+      if (existing) item.props.frequency = Number(existing.frequency ?? 1) + 1;
+    }
     const { id } = await memory.repo.upsertNode(item.label, item.props);
     created.push({ label: item.label, id });
   }

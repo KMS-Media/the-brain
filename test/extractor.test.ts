@@ -33,3 +33,14 @@ test("defaults finding severity to medium", () => {
 test("ignores non-marker text", () => {
   assert.equal(extract("This is a normal paragraph with no markers.").length, 0);
 });
+
+test("assigns a stable, deterministic id for identical content", () => {
+  const a = extract("FINDING[high]: SQL injection -> parameterize")[0];
+  const b = extract("finding[low]:   SQL   injection  -> something else")[0];
+  // Same identifying rule text (case/space-insensitive) → same id regardless of severity/fix.
+  assert.ok(typeof a.props.id === "string" && (a.props.id as string).startsWith("reviewfinding:"));
+  assert.equal(a.props.id, b.props.id, "same rule → same id");
+
+  const other = extract("FINDING: totally different rule")[0];
+  assert.notEqual(a.props.id, other.props.id, "different rule → different id");
+});
