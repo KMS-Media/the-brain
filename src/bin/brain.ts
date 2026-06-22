@@ -102,6 +102,23 @@ async function main() {
       console.log(`Transferred ${res.label}:${res.sourceId} from "${res.from}" to "${res.to}" as ${res.newId}.`);
       break;
     }
+    case "consolidate": {
+      const { consolidate } = await import("../consolidate.js");
+      const dryRun = rest.includes("--dry-run");
+      const thArg = rest.find((a) => a.startsWith("--threshold="));
+      const threshold = thArg ? Number(thArg.split("=")[1]) : undefined;
+      const mem = await Memory.open();
+      const report = await consolidate(mem, { dryRun, threshold });
+      mem.close();
+      console.log(
+        `${dryRun ? "[dry-run] " : ""}Consolidation @ threshold ${report.threshold}: ` +
+          `${report.clustersMerged} duplicate cluster(s), ${report.nodesRemoved} node(s) ` +
+          `${dryRun ? "would be" : ""} merged.`,
+      );
+      for (const m of report.merges) console.log(`  ${m.label}: kept ${m.survivor}, merged ${m.merged.join(", ")}`);
+      for (const s of report.skipped) console.log(`  (skipped ${s.label}: ${s.nodes} nodes > limit)`);
+      break;
+    }
     case "explore": {
       const { writeFileSync } = await import("node:fs");
       const { resolve } = await import("node:path");
@@ -178,6 +195,7 @@ async function main() {
           '  xsearch "<text>"     search across ALL project memories',
           "  transfer <from> <to> <Label> <id>   copy a knowledge node between projects",
           "  explore [out.html] [--all]   export an interactive HTML graph (--all incl. files)",
+          "  consolidate [--dry-run] [--threshold=0.95]   merge duplicate knowledge nodes",
           "  serve                start the GraphQL server",
           "  mcp                  start the MCP stdio server",
           "  backup [destDir]     archive the graph DB (AES-256-GCM if BRAIN_BACKUP_KEY is set)",

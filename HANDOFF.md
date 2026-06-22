@@ -62,8 +62,13 @@ Der gesamte MVP-Pflichtumfang (§19) + die in §16/§14 genannten Ziele sind umg
 - `conn.closeSync()`/`db.closeSync()` existieren, können aber nativ crashen → `GraphDB.close()` bleibt no-op; stattdessen immer `checkpoint()` vor Datei-Zugriff.
 - Nur **eine** Kuzu-Database pro Pfad pro Prozess offen halten.
 
-## Mögliche nächste Schritte (V2, §21)
-Echter HNSW-Vektorindex erst bei Millionen Nodes; Cross-Project-Graph; Visual Explorer; LLM-gestützte Wissenskonsolidierung. Cross-Process-Locking (MCP-Server hält DB offen, während Hook-Prozess dieselbe DB öffnet) ist noch nicht abgesichert — bei Bedarf read-only-Opens oder Lock-Handling prüfen.
+## §21 V2 — Stand
+Umgesetzt: **MCP-Server** ✅ · **Multi-Projekt-Graph + Cross-Project-Transfer** ✅ (`src/multi.ts`) · **Visual Graph Explorer** ✅ (`src/explorer.ts`) · **Wissenskonsolidierung** ✅ (`src/consolidate.ts`, `brain consolidate` + MCP `consolidate_memory`) — graph-weites Merging inkl. **Relationship-Rewiring** (über `REL_DEFS` in `schema.ts` als Single-Source-of-Truth), Scalar-Akkumulation, dry-run.
+Offen (größer/aufwändiger): Team Sharing, lokale LLM-Integration, Agent-basierte Wissenspflege, VS-Code-Extension, GitHub-Integration. Echter HNSW-Vektorindex erst bei Millionen Nodes.
+Bekannt offen: Cross-Process-Locking (MCP-Server hält DB offen, während Hook-Prozess dieselbe DB öffnet) — bei Bedarf read-only-Opens / Lock-Handling prüfen.
+
+## Test-Ausführung (wichtig)
+`npm test` läuft mit `--test-concurrency=2`. Prozess-pro-Datei-Isolation ist nötig (sonst kumulieren zu viele Kuzu-Handles + onnxruntime in einem Prozess), aber volle Parallelität (~CPU-Kerne) lässt zu viele Prozesse mit je onnxruntime + mehreren 4-GiB-mmap-DBs gleichzeitig laufen → nativer Ressourcendruck → Crash im schwersten Prozess (learn-hook). `concurrency=2` ist der stabile Mittelweg.
 
 ## Git
 - `dev` lokal = `65e0f05`, eine Commit vor `origin/dev`/`origin/main` (`9777f6b`).
