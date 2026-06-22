@@ -58,8 +58,9 @@ Der gesamte MVP-Pflichtumfang (§19) + die in §16/§14 genannten Ziele sind umg
 
 ## Stolperfallen aus dieser Phase
 - Kuzu `graph.kuzu` ist eine **Datei**; Daten liegen bis `CHECKPOINT` im WAL. Datei-Kopie ohne vorheriges Checkpoint = leer/„Table does not exist".
-- `conn.closeSync()`/`db.closeSync()` existieren, **crashen** aber (SIGSEGV) im Single-Process-Testlauf mit mehreren offenen Handles → `GraphDB.close()` bleibt bewusst no-op; stattdessen immer `checkpoint()` vor Datei-Zugriff.
-- Nur **eine** Kuzu-Database pro Pfad pro Prozess offen halten (Tests: ein langlebiges Handle je Pfad).
+- **mmap-Falle (wichtig):** jede `new kuzu.Database` reserviert per Default **8 TiB** virtuelle mmap (maxDBSize). Viele DBs in einem Prozess (Cross-Project-Suche, Tests) erschöpfen den Adressraum → „Mmap for size … failed" bzw. SIGSEGV. Fix: `config.MAX_DB_SIZE` (4 GiB, Zweierpotenz) als 5. Konstruktor-Arg. **Das war die wahre Ursache der gesamten früheren Test-Flakiness** — nicht onnxruntime. Mit dem Cap läuft die Suite wieder mit Standard-Isolation (Prozess pro Datei) stabil.
+- `conn.closeSync()`/`db.closeSync()` existieren, können aber nativ crashen → `GraphDB.close()` bleibt no-op; stattdessen immer `checkpoint()` vor Datei-Zugriff.
+- Nur **eine** Kuzu-Database pro Pfad pro Prozess offen halten.
 
 ## Mögliche nächste Schritte (V2, §21)
 Echter HNSW-Vektorindex erst bei Millionen Nodes; Cross-Project-Graph; Visual Explorer; LLM-gestützte Wissenskonsolidierung. Cross-Process-Locking (MCP-Server hält DB offen, während Hook-Prozess dieselbe DB öffnet) ist noch nicht abgesichert — bei Bedarf read-only-Opens oder Lock-Handling prüfen.
