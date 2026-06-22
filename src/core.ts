@@ -2,6 +2,7 @@ import { GraphDB } from "./db/kuzu.js";
 import { Repository } from "./db/repo.js";
 import { SearchEngine } from "./retrieval/search.js";
 import { buildContext } from "./retrieval/contextBuilder.js";
+import { backupDatabase, type BackupResult } from "./backup.js";
 import type { MemoryContext, NodeLabel, ScoredNode } from "./types.js";
 
 /**
@@ -86,6 +87,16 @@ export class Memory {
       findings: unwrap(findings, "f"),
       experiences: unwrap(experiences, "e"),
     };
+  }
+
+  /**
+   * Write a (optionally encrypted) backup of this project's database (PRD §17).
+   * Checkpoints first so the on-disk files are consistent before they are
+   * packed.
+   */
+  async backup(destDir: string, stamp: string, passphrase?: string): Promise<BackupResult> {
+    await this.db.checkpoint();
+    return backupDatabase(this.db.storageDir, destDir, stamp, passphrase);
   }
 
   close(): void {
