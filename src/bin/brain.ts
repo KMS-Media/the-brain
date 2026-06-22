@@ -68,6 +68,40 @@ async function main() {
       mem.close();
       break;
     }
+    case "projects": {
+      const { listProjects } = await import("../multi.js");
+      const projects = listProjects();
+      if (projects.length === 0) {
+        console.log("No project memories found under the memory home.");
+      } else {
+        for (const p of projects) console.log(`${p.name}\t${p.storageDir}`);
+      }
+      break;
+    }
+    case "xsearch": {
+      const { searchAcrossProjects } = await import("../multi.js");
+      const hits = await searchAcrossProjects(rest.join(" "));
+      for (const h of hits) {
+        const title = h.props.title ?? h.props.name ?? h.props.rule ?? h.props.problem ?? h.id;
+        console.log(`[${h.project}] (${h.label}, ${h.score.toFixed(3)}) ${String(title)}`);
+      }
+      break;
+    }
+    case "transfer": {
+      const { findProject, transferNode } = await import("../multi.js");
+      const [fromName, toName, label, id] = rest;
+      if (!fromName || !toName || !label || !id) {
+        console.error("Usage: brain transfer <fromProject> <toProject> <Label> <id>");
+        process.exit(1);
+      }
+      const from = findProject(fromName);
+      const to = findProject(toName);
+      if (!from) { console.error(`Project not found: ${fromName}`); process.exit(1); }
+      if (!to) { console.error(`Project not found: ${toName}`); process.exit(1); }
+      const res = await transferNode(from, to, label as never, id);
+      console.log(`Transferred ${res.label}:${res.sourceId} from "${res.from}" to "${res.to}" as ${res.newId}.`);
+      break;
+    }
     case "serve": {
       const { startGraphQLServer } = await import("../graphql/server.js");
       const { port } = await startGraphQLServer();
@@ -125,6 +159,9 @@ async function main() {
           '  component "<name>"   print a component view (JSON)',
           '  learn "<text>"       extract & store knowledge (markers: ADR/FINDING/LEARNED/RULE/NOTE)',
           "  ingest [gitLimit]    scan repo structure (files/dirs) + git history into the graph",
+          "  projects             list all project memories under the memory home",
+          '  xsearch "<text>"     search across ALL project memories',
+          "  transfer <from> <to> <Label> <id>   copy a knowledge node between projects",
           "  serve                start the GraphQL server",
           "  mcp                  start the MCP stdio server",
           "  backup [destDir]     archive the graph DB (AES-256-GCM if BRAIN_BACKUP_KEY is set)",
