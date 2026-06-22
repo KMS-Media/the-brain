@@ -48,14 +48,21 @@ Benchmark @102k Nodes + 30k Edges: `search()` median **82 ms** (Ziel ≤100 ms).
 Umgesetzt: (a) Traversal gebündelt (label-loses `MATCH (a)-[]-(b) WHERE a.id IN $ids`, je 1 Query statt N+1); (b) schlanke Suche — der Cosine-Scan liefert nur `id` + Ranking-Felder, Render-Felder werden per `hydrate()` nur für die finale Top-N nachgeladen (377→82 ms-Pfad: voller Knoten pro Scan-Treffer kostete ~22 ms extra); (c) `bumpUsage` gebündelt.
 **Vektorindex bewusst NICHT verwendet:** Benchmark zeigte HNSW 9 ms vs. schlanke Brute-Force 15 ms (single-label@100k) — ~6 ms Gewinn, aber 69 s Bulk-Build + ~6 ms/Insert Schreib-Strafe + Betriebskomplexität. Lohnt erst bei Millionen Nodes; dann `CREATE_VECTOR_INDEX`/`QUERY_VECTOR_INDEX` (in Kuzu 0.11 verfügbar, bulk-build NACH dem Laden) erwägen.
 
-## Offene PRD-Punkte (Priorität absteigend)
-1. **§9 Intent Analysis** fehlt — Prompt wird direkt eingebettet, ohne Absichts-/Themenklassifikation.
-2. **§17 Verschlüsselbarer Speicher** — keine Verschlüsselung implementiert (Rest von §17 erfüllt).
-3. **§15 `embedding_version`** — nur `embedding` + `embeddingModel` gespeichert; Versionsfeld fehlt.
-4. **§12 semantisches Zusammenführen ähnlicher Findings** — aktuell nur zeilenbasiertes Dedup.
+## Offene PRD-Punkte — ALLE ERLEDIGT
+- **§9 Intent Analysis** ✅ `src/retrieval/intent.ts` — heuristische Prompt-Klassifikation; fokussierte Labels bekommen mehr Suchbreite + kleinen Score-Boost.
+- **§15 `embedding_version`** ✅ in `RANK`-Spalten + `config.EMBEDDING_VERSION`; idempotente `ALTER TABLE ... ADD IF NOT EXISTS`-Migration für Alt-DBs.
+- **§12 semantisches Finding-Merging** ✅ Context Builder verschmilzt per Wort-Jaccard (≥0.6) innerhalb gleicher Label; höchstgerankte Formulierung bleibt.
+- **§17 Verschlüsselbarer Speicher** ✅ `src/backup.ts` — `brain backup`/`restore`, AES-256-GCM (scrypt) via `BRAIN_BACKUP_KEY`. WICHTIG: `Memory.backup()` ruft `db.checkpoint()` (Daten liegen sonst nur im WAL und fehlen in der Datei-Kopie).
 
-## Nächster sinnvoller Schritt
-§9 Intent-Analyse: vor dem Einbetten den Prompt grob klassifizieren (z.B. „braucht Findings/Decisions/Architektur?") und die Suche/Priorisierung danach gewichten. Klein & wirkungsvoll. Danach §15 (`embedding_version`, trivial) und §12 (semantisches Finding-Merging).
+Der gesamte MVP-Pflichtumfang (§19) + die in §16/§14 genannten Ziele sind umgesetzt. Verbleibend sind nur noch §21-Zukunftsthemen (V2).
+
+## Stolperfallen aus dieser Phase
+- Kuzu `graph.kuzu` ist eine **Datei**; Daten liegen bis `CHECKPOINT` im WAL. Datei-Kopie ohne vorheriges Checkpoint = leer/„Table does not exist".
+- `conn.closeSync()`/`db.closeSync()` existieren, **crashen** aber (SIGSEGV) im Single-Process-Testlauf mit mehreren offenen Handles → `GraphDB.close()` bleibt bewusst no-op; stattdessen immer `checkpoint()` vor Datei-Zugriff.
+- Nur **eine** Kuzu-Database pro Pfad pro Prozess offen halten (Tests: ein langlebiges Handle je Pfad).
+
+## Mögliche nächste Schritte (V2, §21)
+Echter HNSW-Vektorindex erst bei Millionen Nodes; Cross-Project-Graph; Visual Explorer; LLM-gestützte Wissenskonsolidierung. Cross-Process-Locking (MCP-Server hält DB offen, während Hook-Prozess dieselbe DB öffnet) ist noch nicht abgesichert — bei Bedarf read-only-Opens oder Lock-Handling prüfen.
 
 ## Git
 - `dev` lokal = `65e0f05`, eine Commit vor `origin/dev`/`origin/main` (`9777f6b`).
