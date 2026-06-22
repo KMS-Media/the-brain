@@ -75,8 +75,11 @@ Der gesamte MVP-Pflichtumfang (§19) + die in §16/§14 genannten Ziele sind umg
 
 Bekannt offen: Cross-Process-Locking (MCP-Server hält DB offen, während Hook-Prozess dieselbe DB öffnet) — bei Bedarf read-only-Opens / Lock-Handling prüfen. Echter HNSW-Vektorindex erst bei Millionen Nodes.
 
+## CI
+`.github/workflows/ci.yml` läuft bei Push auf main/dev und PRs: Job **quality** (npm ci + build + test auf Node 20 & 22, Modell-Cache) und **extension** (Extension kompilieren). Grün auf `main`.
+
 ## Test-Ausführung (wichtig)
-`npm test` → `node test/run.mjs` (eigener Runner). Hintergrund: die nativen Libs (onnxruntime/Kuzu) **crashen intermittierend in ihren Destruktoren beim Prozess-Exit** (`libc++abi: mutex lock failed`) — NACHDEM alle Subtests grün sind. Der Exit-Code ist damit unzuverlässig, die berichteten Testergebnisse sind korrekt. `test/run.mjs` führt jede Datei einzeln aus und bewertet pass/fail anhand der Subtest-Ergebnisse (✔/✖ mit Dauer), ignoriert den reinen Exit-Crash, meldet echte Fehlschläge aber weiterhin. `npm run test:raw` ist der unbearbeitete Node-Test-Lauf. Nicht zurück auf den rohen Lauf als `test` stellen — er ist flaky durch den Exit-Crash.
+`npm test` → `node test/run.mjs` (eigener Runner). Der Runner setzt `BRAIN_FAKE_EMBED=1`: die Tests nutzen ein deterministisches Hashing-Embedding (kein onnxruntime → stabil & schnell, auf CI essenziell, da das native Modell quer über viele kurzlebige Prozesse auch MITTEN im Test crasht). Token-Überlappung bleibt erhalten, daher gelten alle Semantik-Ordering-Assertions weiter. Ein winziger Nicht-Ganzzahl-Offset hält Kuzu bei `DOUBLE[]` (sonst `INT64[]` → `array_cosine_similarity` lehnt ab). `test/embedder.test.ts` setzt `BRAIN_FAKE_EMBED=0` und deckt das echte Modell ab. Hintergrund: die nativen Libs (onnxruntime/Kuzu) **crashen intermittierend in ihren Destruktoren beim Prozess-Exit** (`libc++abi: mutex lock failed`) — NACHDEM alle Subtests grün sind. Der Exit-Code ist damit unzuverlässig, die berichteten Testergebnisse sind korrekt. `test/run.mjs` führt jede Datei einzeln aus und bewertet pass/fail anhand der Subtest-Ergebnisse (✔/✖ mit Dauer), ignoriert den reinen Exit-Crash, meldet echte Fehlschläge aber weiterhin. `npm run test:raw` ist der unbearbeitete Node-Test-Lauf. Nicht zurück auf den rohen Lauf als `test` stellen — er ist flaky durch den Exit-Crash.
 
 ## Git
 - `dev` lokal = `65e0f05`, eine Commit vor `origin/dev`/`origin/main` (`9777f6b`).
