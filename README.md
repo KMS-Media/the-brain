@@ -98,6 +98,10 @@ node dist/bin/brain.js xsearch "auth"               # search across ALL projects
 node dist/bin/brain.js transfer alpha beta Decision <id>   # copy knowledge between projects
 node dist/bin/brain.js explore graph.html           # export an interactive HTML graph
 node dist/bin/brain.js consolidate --dry-run         # preview merging duplicate knowledge
+node dist/bin/brain.js curate                        # maintenance agent (consolidate + promote findings)
+node dist/bin/brain.js share export team.brainshare  # export a shareable bundle
+node dist/bin/brain.js share import team.brainshare  # merge a teammate's bundle
+node dist/bin/brain.js github --limit=200            # ingest GitHub issues + PRs (via gh)
 ```
 
 ## Version 2 features (PRD §21)
@@ -118,6 +122,25 @@ Beyond the MVP, these V2 capabilities are implemented:
   **rewires all of the duplicates' relationships onto it**, accumulates the
   usage/frequency signals, and deletes the rest. `--dry-run` previews. This is
   what makes quality rise and repeated findings converge over time (PRD §20).
+- **Agent-based curation** — `brain curate` (`curate_memory` MCP tool) runs a
+  maintenance agent: consolidate duplicates, **promote recurring review findings
+  (frequency ≥ N) into coding standards** (linked `VIOLATES`), and optionally
+  prune stale, unused, low-importance knowledge (`--prune`). Run it on a schedule.
+- **Team sharing** — `brain share export <file>` writes a portable, mergeable
+  bundle (encrypted if `BRAIN_BACKUP_KEY` is set); a teammate runs
+  `brain share import <file>` to merge it into their own local store
+  (re-embedded locally). No server, no cloud. Run `brain consolidate` after to
+  collapse duplicates two people captured independently.
+- **Local LLM integration** — set `BRAIN_LLM_URL` to a local OpenAI-compatible
+  endpoint (Ollama, llama.cpp) and knowledge extraction is augmented by the LLM
+  on top of the regex markers (merged, deduplicated). Fully local; if unset or
+  unreachable it silently falls back to the heuristics.
+- **GitHub integration** — `brain github` (`ingest_github` MCP tool) pulls
+  issues (→ `Problem`) and pull requests (→ `Decision`) via the `gh` CLI, and
+  links commits that reference a PR (`#N`) via `IMPLEMENTS`.
+- **VS Code extension** — `extension/` is a ready-to-build VS Code extension
+  (search memory, per-file context, ingest, curate, open the graph explorer in a
+  webview). See `extension/README.md`.
 - **MCP server integration** — see above.
 
 ### Knowledge markers (for `learn` / `learn_from_text`)
@@ -153,7 +176,10 @@ mutation { rememberReviewFinding(rule: "...", severity: "high", fix: "...") { id
 | `BRAIN_TOKEN_BUDGET` | `1500` | context block token budget |
 | `BRAIN_GRAPHQL_PORT` | `4123` | GraphQL port |
 | `BRAIN_OFFLINE` | – | `1` → forbid model downloads |
-| `BRAIN_BACKUP_KEY` | – | passphrase → `backup` produces an AES-256-GCM encrypted archive |
+| `BRAIN_BACKUP_KEY` | – | passphrase → `backup`/`share` produce AES-256-GCM encrypted output |
+| `BRAIN_LLM_URL` | – | local OpenAI-compatible endpoint → LLM-augmented extraction |
+| `BRAIN_LLM_MODEL` | `llama3.2` | model name for the local LLM |
+| `BRAIN_MAX_DB_SIZE` | `4 GiB` | per-store max DB size (mmap reservation) |
 
 ## Data model
 

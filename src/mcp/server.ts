@@ -134,6 +134,19 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
   );
 
   server.registerTool(
+    "ingest_github",
+    {
+      title: "Ingest GitHub issues & PRs",
+      description: "Pull GitHub issues (→ Problem nodes) and pull requests (→ Decision nodes) via the gh CLI, and link commits that reference a PR. Requires gh to be installed and authenticated.",
+      inputSchema: { limit: z.number().optional().describe("Max issues/PRs to fetch (default 100)") },
+    },
+    async ({ limit }) => {
+      const { ingestGitHub } = await import("../github.js");
+      return text(await ingestGitHub(memory, { limit, cwd: projectPath }));
+    },
+  );
+
+  server.registerTool(
     "ingest_repository",
     {
       title: "Ingest repository structure",
@@ -144,6 +157,22 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
       const { ingest } = await import("../ingest/index.js");
       const res = await ingest(memory, projectPath, gitLimit ?? 100);
       return text(res);
+    },
+  );
+
+  server.registerTool(
+    "curate_memory",
+    {
+      title: "Curate the knowledge graph",
+      description: "Run the maintenance agent: consolidate duplicates, promote recurring review findings into coding standards, and (optionally) prune stale low-value knowledge. Use dryRun to preview.",
+      inputSchema: {
+        dryRun: z.boolean().optional(),
+        prune: z.boolean().optional().describe("Also delete stale, unused, low-importance knowledge"),
+      },
+    },
+    async ({ dryRun, prune }) => {
+      const { curate } = await import("../curate.js");
+      return text(await curate(memory, { dryRun, prune }));
     },
   );
 

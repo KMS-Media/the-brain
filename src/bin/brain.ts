@@ -68,6 +68,22 @@ async function main() {
       mem.close();
       break;
     }
+    case "github": {
+      const { ingestGitHub } = await import("../github.js");
+      const limArg = rest.find((a) => a.startsWith("--limit="));
+      const limit = limArg ? Number(limArg.split("=")[1]) : 100;
+      const mem = await Memory.open();
+      try {
+        const res = await ingestGitHub(mem, { limit });
+        console.log(`GitHub: ingested ${res.issues} issue(s), ${res.pulls} PR(s), linked ${res.links} commit→PR edge(s).`);
+      } catch (e) {
+        console.error(String((e as Error).message));
+        process.exitCode = 1;
+      } finally {
+        mem.close();
+      }
+      break;
+    }
     case "projects": {
       const { listProjects } = await import("../multi.js");
       const projects = listProjects();
@@ -102,6 +118,26 @@ async function main() {
       console.log(`Transferred ${res.label}:${res.sourceId} from "${res.from}" to "${res.to}" as ${res.newId}.`);
       break;
     }
+    case "share": {
+      const sub = rest[0];
+      const file = rest[1];
+      if ((sub !== "export" && sub !== "import") || !file) {
+        console.error("Usage: brain share export|import <file>");
+        process.exit(1);
+      }
+      const { writeBundle, readAndImport } = await import("../share.js");
+      const { backupPassphrase } = await import("../config.js");
+      const mem = await Memory.open();
+      if (sub === "export") {
+        const res = await writeBundle(mem, file, backupPassphrase());
+        console.log(`Shared ${res.nodes} nodes, ${res.edges} edges → ${file}${res.encrypted ? " (encrypted)" : ""}.`);
+      } else {
+        const res = await readAndImport(mem, file, backupPassphrase());
+        console.log(`Imported ${res.nodes} nodes, ${res.edges} edges. Tip: run 'brain consolidate' to merge duplicates.`);
+      }
+      mem.close();
+      break;
+    }
     case "consolidate": {
       const { consolidate } = await import("../consolidate.js");
       const dryRun = rest.includes("--dry-run");
@@ -117,6 +153,20 @@ async function main() {
       );
       for (const m of report.merges) console.log(`  ${m.label}: kept ${m.survivor}, merged ${m.merged.join(", ")}`);
       for (const s of report.skipped) console.log(`  (skipped ${s.label}: ${s.nodes} nodes > limit)`);
+      break;
+    }
+    case "curate": {
+      const { curate } = await import("../curate.js");
+      const dryRun = rest.includes("--dry-run");
+      const doPrune = rest.includes("--prune");
+      const mem = await Memory.open();
+      const r = await curate(mem, { dryRun, prune: doPrune });
+      mem.close();
+      console.log(
+        `${dryRun ? "[dry-run] " : ""}Curation: merged ${r.consolidation.nodesRemoved} duplicate(s), ` +
+          `promoted ${r.promoted.length} finding(s) to standards, pruned ${r.pruned.length} stale node(s).`,
+      );
+      for (const p of r.promoted) console.log(`  promoted: "${p.rule}" → standard ${p.standardId}`);
       break;
     }
     case "explore": {
@@ -191,11 +241,14 @@ async function main() {
           '  component "<name>"   print a component view (JSON)',
           '  learn "<text>"       extract & store knowledge (markers: ADR/FINDING/LEARNED/RULE/NOTE)',
           "  ingest [gitLimit]    scan repo structure (files/dirs) + git history into the graph",
+          "  github [--limit=N]   ingest GitHub issues (→Problem) and PRs (→Decision) via gh",
           "  projects             list all project memories under the memory home",
           '  xsearch "<text>"     search across ALL project memories',
           "  transfer <from> <to> <Label> <id>   copy a knowledge node between projects",
           "  explore [out.html] [--all]   export an interactive HTML graph (--all incl. files)",
           "  consolidate [--dry-run] [--threshold=0.95]   merge duplicate knowledge nodes",
+          "  curate [--dry-run] [--prune]   maintenance agent: consolidate + promote findings + prune",
+          "  share export|import <file>   share knowledge with a teammate (encrypted if BRAIN_BACKUP_KEY)",
           "  serve                start the GraphQL server",
           "  mcp                  start the MCP stdio server",
           "  backup [destDir]     archive the graph DB (AES-256-GCM if BRAIN_BACKUP_KEY is set)",

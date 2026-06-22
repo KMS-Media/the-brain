@@ -1,0 +1,41 @@
+{
+  "name": "the-brain-vscode",
+  "displayName": "the_brain — Local Memory",
+  "description": "Query and maintain your project's local the_brain memory graph from VS Code.",
+  "version": "0.1.0",
+  "publisher": "kms-media",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other", "Machine Learning"],
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      { "command": "theBrain.search", "title": "the_brain: Search Memory" },
+      { "command": "theBrain.contextForFile", "title": "the_brain: Context for Current File" },
+      { "command": "theBrain.ingest", "title": "the_brain: Ingest Repository" },
+      { "command": "theBrain.curate", "title": "the_brain: Curate Memory" },
+      { "command": "theBrain.explore", "title": "the_brain: Open Graph Explorer" }
+    ],
+    "configuration": {
+      "title": "the_brain",
+      "properties": {
+        "theBrain.cli": {
+          "type": "string",
+          "default": "brain",
+          "description": "Command used to invoke the the_brain CLI. Use e.g. 'node /path/to/the_brain/dist/bin/brain.js' if not installed globally."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.7.0"
+  }
+}

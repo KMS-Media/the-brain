@@ -1,5 +1,7 @@
 node_modules/
 dist/
+extension/node_modules/
+extension/out/
 *.log
 .DS_Store
 # IDE
