@@ -1,5 +1,5 @@
 import * as kuzu from "kuzu";
-import { dbPath, ensureDir, resolveStorageDir, MAX_DB_SIZE } from "../config.js";
+import { dbPath, ensureDir, resolveStorageDir, MAX_DB_SIZE, BUFFER_POOL_SIZE } from "../config.js";
 import { ALL_DDL, MIGRATIONS } from "./schema.js";
 
 /**
@@ -23,9 +23,10 @@ export class GraphDB {
     this.storageDir = storageDir;
     ensureDir(storageDir);
     // Args: path, bufferManagerSize, enableCompression, readOnly, maxDBSize.
-    // Capping maxDBSize keeps each Database's mmap reservation modest so many
-    // stores can be opened in one process (e.g. cross-project search).
-    this.db = new kuzu.Database(dbPath(storageDir), undefined, undefined, undefined, MAX_DB_SIZE);
+    // Capping both the buffer pool (else ~80% RAM per Database) and maxDBSize
+    // (else an 8 TiB mmap reservation) keeps each store's footprint modest so
+    // many can be open at once (cross-project search, constrained CI runners).
+    this.db = new kuzu.Database(dbPath(storageDir), BUFFER_POOL_SIZE, undefined, undefined, MAX_DB_SIZE);
     this.conn = new kuzu.Connection(this.db);
   }
 

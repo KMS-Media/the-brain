@@ -27,6 +27,14 @@ export const CONTEXT_TOKEN_BUDGET = Number(process.env.BRAIN_TOKEN_BUDGET ?? 150
  */
 export const MAX_DB_SIZE = Number(process.env.BRAIN_MAX_DB_SIZE ?? 4 * 1024 * 1024 * 1024);
 
+/**
+ * Buffer-pool size in bytes per open database. Kuzu otherwise sizes this to
+ * ~80% of physical RAM *per Database*, which exhausts memory when several
+ * stores are open at once (cross-project search, CI runners). 256 MiB
+ * comfortably holds a 100k-node working set while letting many stores coexist.
+ */
+export const BUFFER_POOL_SIZE = Number(process.env.BRAIN_BUFFER_POOL ?? 256 * 1024 * 1024);
+
 /** GraphQL server port. */
 export const GRAPHQL_PORT = Number(process.env.BRAIN_GRAPHQL_PORT ?? 4123);
 
