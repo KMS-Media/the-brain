@@ -19,6 +19,14 @@ export const EMBEDDING_VERSION = process.env.BRAIN_EMBEDDING_VERSION ?? "1";
 /** Token budget for the assembled context (PRD §12). Rough char≈token/4 heuristic. */
 export const CONTEXT_TOKEN_BUDGET = Number(process.env.BRAIN_TOKEN_BUDGET ?? 1500);
 
+/**
+ * Max database size in bytes (must be a power of 2). Kuzu reserves this much
+ * virtual address space per open Database via mmap; the default (8 TiB) is so
+ * large that opening many stores in one process (e.g. cross-project search)
+ * exhausts the address space. 4 GiB is ample for a 100k-node / 1M-edge graph.
+ */
+export const MAX_DB_SIZE = Number(process.env.BRAIN_MAX_DB_SIZE ?? 4 * 1024 * 1024 * 1024);
+
 /** GraphQL server port. */
 export const GRAPHQL_PORT = Number(process.env.BRAIN_GRAPHQL_PORT ?? 4123);
 

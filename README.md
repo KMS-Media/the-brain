@@ -160,9 +160,9 @@ maintenance per insert) — it only pays off at millions of nodes.
 ## Tests
 
 ```bash
-npm test    # 25 tests, single-process; core round-trips, semantic search,
-            # prioritization, component traversal, ranking, extractor, ingest,
-            # auto-learning hook
+npm test    # core round-trips, semantic search, prioritization, component
+            # traversal, ranking, extractor, ingest, auto-learning hook,
+            # intent analysis, finding-merge, backup/restore, multi-project
 ```
 
 ## Security (PRD §17)
