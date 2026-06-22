@@ -68,7 +68,7 @@ function dedupKey(label: NodeLabel, p: Record<string, unknown>): string {
  * (e.g. emitted in different sessions) collapse onto the same node, so the
  * auto-learn loop never produces duplicates and frequency can accumulate.
  */
-function stableId(label: NodeLabel, props: Record<string, unknown>): string {
+export function stableId(label: NodeLabel, props: Record<string, unknown>): string {
   const hash = createHash("sha1").update(`${label}\n${dedupKey(label, props)}`).digest("hex").slice(0, 16);
   return `${label.toLowerCase()}:${hash}`;
 }
@@ -93,9 +93,29 @@ export function extract(text: string): ExtractedItem[] {
  * Extract and persist; returns the ids of created/updated nodes. Stable ids
  * make this idempotent. Recurring review findings accumulate `frequency`
  * (PRD §13) instead of duplicating.
+ *
+ * When `useLLM` is set and a local LLM is configured (PRD §21 V2), the regex
+ * markers are augmented with LLM-extracted knowledge; results are merged and
+ * deduplicated by stable id, so the LLM only ever adds coverage.
  */
-export async function learn(memory: Memory, text: string): Promise<{ label: NodeLabel; id: string }[]> {
+export async function learn(
+  memory: Memory,
+  text: string,
+  opts: { useLLM?: boolean } = {},
+): Promise<{ label: NodeLabel; id: string }[]> {
   const items = extract(text);
+
+  if (opts.useLLM) {
+    const { extractWithLLM } = await import("../llm.js");
+    const seen = new Set(items.map((i) => i.props.id));
+    for (const li of await extractWithLLM(text)) {
+      const id = stableId(li.label, li.props);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      items.push({ label: li.label, props: { ...li.props, id } });
+    }
+  }
+
   const created: { label: NodeLabel; id: string }[] = [];
   for (const item of items) {
     if (item.label === "ReviewFinding") {
