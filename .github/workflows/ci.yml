@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Build & test (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["20", "22"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # Cache the one-time local embedding model download (~30 MB), shared
+      # across runs so tests don't re-fetch it from HuggingFace every time.
+      - name: Cache embedding model
+        uses: actions/cache@v4
+        with:
+          path: ~/.claude-memory/models
+          key: brain-model-bge-small-en-v1.5
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check & build
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+        env:
+          # Keep tests fully offline once the model is cached.
+          BRAIN_OFFLINE: "0"
+
+  extension:
+    name: Compile VS Code extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install extension dependencies
+        working-directory: extension
+        run: npm ci
+
+      - name: Compile extension
+        working-directory: extension
+        run: npm run compile
