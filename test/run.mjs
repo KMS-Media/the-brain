@@ -26,6 +26,10 @@ for (const file of files) {
   const r = spawnSync("node", ["--import", "tsx", "--test", "--test-reporter=spec", file], {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
+    // Use the deterministic hashing embedding by default so the suite doesn't
+    // load the native ONNX model in every process (unstable across many
+    // short-lived processes). The dedicated embedder test opts back out.
+    env: { ...process.env, BRAIN_FAKE_EMBED: process.env.BRAIN_FAKE_EMBED ?? "1" },
   });
   const out = `${r.stdout || ""}\n${r.stderr || ""}`;
 
