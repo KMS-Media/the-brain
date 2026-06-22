@@ -60,34 +60,41 @@ export const NODE_TABLES: string[] = [
  * Kuzu 0.11. Each relationship may carry no properties (MVP) — they are
  * pure structural/semantic edges.
  */
-export const REL_TABLES: string[] = [
+export interface RelDef {
+  type: string;
+  /** Allowed [FROM, TO] label pairs for this relationship. */
+  pairs: [string, string][];
+}
+
+/**
+ * Single source of truth for the relationship model. The DDL below and the
+ * edge-rewiring logic in consolidation both derive from this, so they can
+ * never drift apart.
+ */
+export const REL_DEFS: RelDef[] = [
   // Projektstruktur
-  `CREATE REL TABLE IF NOT EXISTS CONTAINS(
-     FROM Project TO Component, FROM Project TO Directory, FROM Directory TO File)`,
-
+  { type: "CONTAINS", pairs: [["Project", "Component"], ["Project", "Directory"], ["Directory", "File"]] },
   // Architektur
-  `CREATE REL TABLE IF NOT EXISTS USES(FROM Component TO Component)`,
-  `CREATE REL TABLE IF NOT EXISTS CALLS(FROM Component TO Component)`,
-  `CREATE REL TABLE IF NOT EXISTS DEPENDS_ON(FROM Component TO Component)`,
-
+  { type: "USES", pairs: [["Component", "Component"]] },
+  { type: "CALLS", pairs: [["Component", "Component"]] },
+  { type: "DEPENDS_ON", pairs: [["Component", "Component"]] },
   // Entscheidungen
-  `CREATE REL TABLE IF NOT EXISTS AFFECTS(
-     FROM Decision TO Component, FROM ReviewFinding TO Component, FROM ReviewFinding TO File)`,
-  `CREATE REL TABLE IF NOT EXISTS REPLACES(FROM Decision TO Decision)`,
-  `CREATE REL TABLE IF NOT EXISTS IMPLEMENTS(
-     FROM Decision TO Knowledge, FROM GitCommit TO Decision)`,
-
+  { type: "AFFECTS", pairs: [["Decision", "Component"], ["ReviewFinding", "Component"], ["ReviewFinding", "File"]] },
+  { type: "REPLACES", pairs: [["Decision", "Decision"]] },
+  { type: "IMPLEMENTS", pairs: [["Decision", "Knowledge"], ["GitCommit", "Decision"]] },
   // Review findings
-  `CREATE REL TABLE IF NOT EXISTS VIOLATES(FROM ReviewFinding TO CodingStandard)`,
-
+  { type: "VIOLATES", pairs: [["ReviewFinding", "CodingStandard"]] },
   // Erfahrungen
-  `CREATE REL TABLE IF NOT EXISTS SOLVES(FROM Experience TO Problem)`,
-  `CREATE REL TABLE IF NOT EXISTS RELATES_TO(FROM Experience TO Component)`,
-
+  { type: "SOLVES", pairs: [["Experience", "Problem"]] },
+  { type: "RELATES_TO", pairs: [["Experience", "Component"]] },
   // Git
-  `CREATE REL TABLE IF NOT EXISTS MODIFIES(FROM GitCommit TO File)`,
-  `CREATE REL TABLE IF NOT EXISTS FIXES(FROM GitCommit TO ReviewFinding)`,
+  { type: "MODIFIES", pairs: [["GitCommit", "File"]] },
+  { type: "FIXES", pairs: [["GitCommit", "ReviewFinding"]] },
 ];
+
+export const REL_TABLES: string[] = REL_DEFS.map(
+  (d) => `CREATE REL TABLE IF NOT EXISTS ${d.type}(${d.pairs.map(([f, t]) => `FROM ${f} TO ${t}`).join(", ")})`,
+);
 
 export const ALL_DDL: string[] = [...NODE_TABLES, ...REL_TABLES];
 
