@@ -148,6 +148,22 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
   );
 
   server.registerTool(
+    "consolidate_memory",
+    {
+      title: "Consolidate duplicate knowledge",
+      description: "Merge semantically duplicate knowledge nodes (same type, cosine ≥ threshold): keep one canonical node, rewire its relationships, accumulate usage/frequency, delete the rest. Use dryRun first to preview.",
+      inputSchema: {
+        threshold: z.number().optional().describe("Cosine similarity to treat as duplicate (default 0.95)"),
+        dryRun: z.boolean().optional().describe("Preview without modifying the graph"),
+      },
+    },
+    async ({ threshold, dryRun }) => {
+      const { consolidate } = await import("../consolidate.js");
+      return text(await consolidate(memory, { threshold, dryRun }));
+    },
+  );
+
+  server.registerTool(
     "learn_from_text",
     {
       title: "Extract and store knowledge from text",

@@ -97,6 +97,7 @@ node dist/bin/brain.js projects                     # list all project memories
 node dist/bin/brain.js xsearch "auth"               # search across ALL projects
 node dist/bin/brain.js transfer alpha beta Decision <id>   # copy knowledge between projects
 node dist/bin/brain.js explore graph.html           # export an interactive HTML graph
+node dist/bin/brain.js consolidate --dry-run         # preview merging duplicate knowledge
 ```
 
 ## Version 2 features (PRD §21)
@@ -111,6 +112,12 @@ Beyond the MVP, these V2 capabilities are implemented:
   offline, interactive HTML visualization (force-directed, color-coded by type,
   drag/pan/zoom, label toggles). Knowledge + components by default; add `--all`
   to include files/directories/commits.
+- **Knowledge consolidation** — `brain consolidate` (or the `consolidate_memory`
+  MCP tool) merges semantically duplicate knowledge nodes graph-wide: it keeps
+  one canonical survivor per cluster (cosine ≥ threshold, default 0.95),
+  **rewires all of the duplicates' relationships onto it**, accumulates the
+  usage/frequency signals, and deletes the rest. `--dry-run` previews. This is
+  what makes quality rise and repeated findings converge over time (PRD §20).
 - **MCP server integration** — see above.
 
 ### Knowledge markers (for `learn` / `learn_from_text`)
