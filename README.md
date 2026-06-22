@@ -93,7 +93,25 @@ node dist/bin/brain.js serve                       # GraphQL on 127.0.0.1:4123
 node dist/bin/brain.js mcp                          # MCP stdio server
 node dist/bin/brain.js backup                       # archive the DB (encrypted if BRAIN_BACKUP_KEY set)
 node dist/bin/brain.js restore <file>               # restore a backup archive
+node dist/bin/brain.js projects                     # list all project memories
+node dist/bin/brain.js xsearch "auth"               # search across ALL projects
+node dist/bin/brain.js transfer alpha beta Decision <id>   # copy knowledge between projects
+node dist/bin/brain.js explore graph.html           # export an interactive HTML graph
 ```
+
+## Version 2 features (PRD §21)
+
+Beyond the MVP, these V2 capabilities are implemented:
+
+- **Multi-project graph & cross-project transfer** — every project has its own
+  store under the memory home; `brain xsearch` federates search across all of
+  them (each hit tagged with its project) and `brain transfer` copies a
+  knowledge node into another project (re-embedded there).
+- **Visual graph explorer** — `brain explore` writes a self-contained,
+  offline, interactive HTML visualization (force-directed, color-coded by type,
+  drag/pan/zoom, label toggles). Knowledge + components by default; add `--all`
+  to include files/directories/commits.
+- **MCP server integration** — see above.
 
 ### Knowledge markers (for `learn` / `learn_from_text`)
 

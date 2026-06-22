@@ -7,6 +7,7 @@ export { buildContext } from "./retrieval/contextBuilder.js";
 export { extract, learn } from "./learning/extractor.js";
 export { ingest, scanStructure, ingestGitHistory } from "./ingest/index.js";
 export { listProjects, searchAcrossProjects, transferNode, findProject } from "./multi.js";
+export { exportGraph, renderHtml } from "./explorer.js";
 export { embed, cosine } from "./embeddings/embedder.js";
 export * from "./types.js";
 export * as config from "./config.js";

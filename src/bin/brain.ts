@@ -102,6 +102,21 @@ async function main() {
       console.log(`Transferred ${res.label}:${res.sourceId} from "${res.from}" to "${res.to}" as ${res.newId}.`);
       break;
     }
+    case "explore": {
+      const { writeFileSync } = await import("node:fs");
+      const { resolve } = await import("node:path");
+      const { exportGraph, renderHtml } = await import("../explorer.js");
+      const includeStructure = rest.includes("--all");
+      const outArg = rest.find((a) => !a.startsWith("--"));
+      const out = resolve(outArg ?? "brain-graph.html");
+      const mem = await Memory.open();
+      const data = await exportGraph(mem, { includeStructure });
+      const html = renderHtml(data, resolveStorageDir().split("/").pop() ?? "project");
+      mem.close();
+      writeFileSync(out, html, "utf8");
+      console.log(`Graph explorer written to ${out} (${data.nodes.length} nodes, ${data.edges.length} edges). Open it in a browser.`);
+      break;
+    }
     case "serve": {
       const { startGraphQLServer } = await import("../graphql/server.js");
       const { port } = await startGraphQLServer();
@@ -162,6 +177,7 @@ async function main() {
           "  projects             list all project memories under the memory home",
           '  xsearch "<text>"     search across ALL project memories',
           "  transfer <from> <to> <Label> <id>   copy a knowledge node between projects",
+          "  explore [out.html] [--all]   export an interactive HTML graph (--all incl. files)",
           "  serve                start the GraphQL server",
           "  mcp                  start the MCP stdio server",
           "  backup [destDir]     archive the graph DB (AES-256-GCM if BRAIN_BACKUP_KEY is set)",
