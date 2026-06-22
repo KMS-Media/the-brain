@@ -36,6 +36,28 @@ export function backupPassphrase(): string | undefined {
   return k && k.length > 0 ? k : undefined;
 }
 
+/**
+ * Optional local LLM (PRD §21 V2). Points at an OpenAI-compatible chat endpoint
+ * served locally — e.g. Ollama (`http://localhost:11434/v1`) or llama.cpp. Stays
+ * fully local; unset → all LLM features gracefully no-op and fall back to the
+ * deterministic heuristics.
+ */
+export interface LLMConfig {
+  baseUrl: string;
+  model: string;
+  apiKey?: string;
+}
+
+export function llmConfig(): LLMConfig | null {
+  const baseUrl = process.env.BRAIN_LLM_URL;
+  if (!baseUrl) return null;
+  return {
+    baseUrl: baseUrl.replace(/\/$/, ""),
+    model: process.env.BRAIN_LLM_MODEL ?? "llama3.2",
+    apiKey: process.env.BRAIN_LLM_KEY,
+  };
+}
+
 function slug(p: string): string {
   return basename(p).replace(/[^a-zA-Z0-9._-]/g, "_") || "default";
 }

@@ -14,7 +14,8 @@
     "dev": "tsx",
     "mcp": "tsx src/mcp/server.ts",
     "serve": "tsx src/graphql/server.ts",
-    "test": "node --import tsx --test --test-concurrency=2 test/**/*.test.ts",
+    "test": "node test/run.mjs",
+    "test:raw": "node --import tsx --test --test-concurrency=1 test/**/*.test.ts",
     "brain": "tsx src/bin/brain.ts"
   },
   "engines": {

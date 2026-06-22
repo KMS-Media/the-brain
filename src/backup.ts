@@ -73,7 +73,7 @@ export function unpackDir(buf: Buffer, destRoot: string): void {
   }
 }
 
-function encrypt(buf: Buffer, passphrase: string): Buffer {
+export function encrypt(buf: Buffer, passphrase: string): Buffer {
   const salt = randomBytes(SALT_LEN);
   const iv = randomBytes(IV_LEN);
   const key = scryptSync(passphrase, salt, 32);
@@ -83,7 +83,7 @@ function encrypt(buf: Buffer, passphrase: string): Buffer {
   return Buffer.concat([Buffer.from(ENC_MAGIC), salt, iv, tag, enc]);
 }
 
-function decrypt(buf: Buffer, passphrase: string): Buffer {
+export function decrypt(buf: Buffer, passphrase: string): Buffer {
   if (buf.subarray(0, ENC_MAGIC.length).toString("utf8") !== ENC_MAGIC) {
     throw new Error("Not an encrypted the_brain backup.");
   }

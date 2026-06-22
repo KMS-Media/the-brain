@@ -62,13 +62,21 @@ Der gesamte MVP-Pflichtumfang (§19) + die in §16/§14 genannten Ziele sind umg
 - `conn.closeSync()`/`db.closeSync()` existieren, können aber nativ crashen → `GraphDB.close()` bleibt no-op; stattdessen immer `checkpoint()` vor Datei-Zugriff.
 - Nur **eine** Kuzu-Database pro Pfad pro Prozess offen halten.
 
-## §21 V2 — Stand
-Umgesetzt: **MCP-Server** ✅ · **Multi-Projekt-Graph + Cross-Project-Transfer** ✅ (`src/multi.ts`) · **Visual Graph Explorer** ✅ (`src/explorer.ts`) · **Wissenskonsolidierung** ✅ (`src/consolidate.ts`, `brain consolidate` + MCP `consolidate_memory`) — graph-weites Merging inkl. **Relationship-Rewiring** (über `REL_DEFS` in `schema.ts` als Single-Source-of-Truth), Scalar-Akkumulation, dry-run.
-Offen (größer/aufwändiger): Team Sharing, lokale LLM-Integration, Agent-basierte Wissenspflege, VS-Code-Extension, GitHub-Integration. Echter HNSW-Vektorindex erst bei Millionen Nodes.
-Bekannt offen: Cross-Process-Locking (MCP-Server hält DB offen, während Hook-Prozess dieselbe DB öffnet) — bei Bedarf read-only-Opens / Lock-Handling prüfen.
+## §21 V2 — ALLE umgesetzt ✅
+- **MCP-Server** (`src/mcp/server.ts`, jetzt 13 Tools)
+- **Multi-Projekt-Graph + Cross-Project-Transfer** (`src/multi.ts`)
+- **Visual Graph Explorer** (`src/explorer.ts`, self-contained HTML)
+- **Wissenskonsolidierung** (`src/consolidate.ts`) — Merging inkl. Relationship-Rewiring über `REL_DEFS` (Single-Source-of-Truth in `schema.ts`)
+- **Agent-basierte Wissenspflege** (`src/curate.ts`, `brain curate`) — consolidate + Findings→Standards befördern + optionales Pruning
+- **Team Sharing** (`src/share.ts`, `brain share export|import`) — portable, mergebare, optional verschlüsselte Bundles
+- **Lokale LLM-Integration** (`src/llm.ts`) — OpenAI-kompatibel (Ollama/llama.cpp), augmentiert die Extraktion; via `BRAIN_LLM_URL`, optional, graceful fallback
+- **GitHub-Integration** (`src/github.ts`, `brain github`) — Issues→Problem, PRs→Decision, Commit→PR via `gh` CLI
+- **VS-Code-Extension** (`extension/`) — eigenes Paket, kompiliert (`cd extension && npm install && npm run compile`), Thin-Client über die `brain` CLI
+
+Bekannt offen: Cross-Process-Locking (MCP-Server hält DB offen, während Hook-Prozess dieselbe DB öffnet) — bei Bedarf read-only-Opens / Lock-Handling prüfen. Echter HNSW-Vektorindex erst bei Millionen Nodes.
 
 ## Test-Ausführung (wichtig)
-`npm test` läuft mit `--test-concurrency=2`. Prozess-pro-Datei-Isolation ist nötig (sonst kumulieren zu viele Kuzu-Handles + onnxruntime in einem Prozess), aber volle Parallelität (~CPU-Kerne) lässt zu viele Prozesse mit je onnxruntime + mehreren 4-GiB-mmap-DBs gleichzeitig laufen → nativer Ressourcendruck → Crash im schwersten Prozess (learn-hook). `concurrency=2` ist der stabile Mittelweg.
+`npm test` → `node test/run.mjs` (eigener Runner). Hintergrund: die nativen Libs (onnxruntime/Kuzu) **crashen intermittierend in ihren Destruktoren beim Prozess-Exit** (`libc++abi: mutex lock failed`) — NACHDEM alle Subtests grün sind. Der Exit-Code ist damit unzuverlässig, die berichteten Testergebnisse sind korrekt. `test/run.mjs` führt jede Datei einzeln aus und bewertet pass/fail anhand der Subtest-Ergebnisse (✔/✖ mit Dauer), ignoriert den reinen Exit-Crash, meldet echte Fehlschläge aber weiterhin. `npm run test:raw` ist der unbearbeitete Node-Test-Lauf. Nicht zurück auf den rohen Lauf als `test` stellen — er ist flaky durch den Exit-Crash.
 
 ## Git
 - `dev` lokal = `65e0f05`, eine Commit vor `origin/dev`/`origin/main` (`9777f6b`).
