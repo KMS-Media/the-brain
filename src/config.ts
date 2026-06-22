@@ -22,6 +22,12 @@ export const CONTEXT_TOKEN_BUDGET = Number(process.env.BRAIN_TOKEN_BUDGET ?? 150
 /** GraphQL server port. */
 export const GRAPHQL_PORT = Number(process.env.BRAIN_GRAPHQL_PORT ?? 4123);
 
+/** Passphrase for encrypting backups (PRD §17). Unset → backups are plaintext archives. */
+export function backupPassphrase(): string | undefined {
+  const k = process.env.BRAIN_BACKUP_KEY;
+  return k && k.length > 0 ? k : undefined;
+}
+
 function slug(p: string): string {
   return basename(p).replace(/[^a-zA-Z0-9._-]/g, "_") || "default";
 }

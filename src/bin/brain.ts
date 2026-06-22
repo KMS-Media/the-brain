@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import { cpSync, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Memory } from "../core.js";
 import { learn } from "../learning/extractor.js";
-import { resolveStorageDir, dbPath, ensureDir } from "../config.js";
+import { resolveStorageDir, ensureDir } from "../config.js";
 
 /**
  * CLI for the_brain. Subcommands:
@@ -83,17 +83,34 @@ async function main() {
       break;
     }
     case "backup": {
+      const { backupPassphrase } = await import("../config.js");
       const dir = resolveStorageDir();
-      const src = dbPath(dir);
-      if (!existsSync(src)) {
+      if (!existsSync(dir)) {
         console.error("No database to back up. Run `brain init` first.");
         process.exit(1);
       }
       const stamp = new Date().toISOString().replace(/[:.]/g, "-");
       const dest = rest[0] ? ensureDir(rest[0]) : ensureDir(join(dir, "backups"));
-      const target = join(dest, `graph-${stamp}.kuzu`);
-      cpSync(src, target, { recursive: true });
-      console.log(`Backup written to ${target}`);
+      const mem = await Memory.open();
+      const res = await mem.backup(dest, stamp, backupPassphrase());
+      mem.close();
+      console.log(
+        `Backup written to ${res.path} (${(res.bytes / 1024).toFixed(0)} KB, ` +
+          `${res.encrypted ? "AES-256-GCM encrypted" : "plaintext — set BRAIN_BACKUP_KEY to encrypt"}).`,
+      );
+      break;
+    }
+    case "restore": {
+      const { restoreDatabase } = await import("../backup.js");
+      const { backupPassphrase } = await import("../config.js");
+      const archive = rest[0];
+      if (!archive) {
+        console.error("Usage: brain restore <backup-file>");
+        process.exit(1);
+      }
+      const dir = resolveStorageDir();
+      restoreDatabase(archive, dir, backupPassphrase());
+      console.log(`Restored ${archive} into ${dir}`);
       break;
     }
     default:
@@ -110,7 +127,8 @@ async function main() {
           "  ingest [gitLimit]    scan repo structure (files/dirs) + git history into the graph",
           "  serve                start the GraphQL server",
           "  mcp                  start the MCP stdio server",
-          "  backup [destDir]     copy the graph DB to a backup directory",
+          "  backup [destDir]     archive the graph DB (AES-256-GCM if BRAIN_BACKUP_KEY is set)",
+          "  restore <file>       restore a backup archive (needs BRAIN_BACKUP_KEY if encrypted)",
         ].join("\n"),
       );
   }

@@ -91,7 +91,8 @@ node dist/bin/brain.js search "authentication"    # ranked hits as JSON
 node dist/bin/brain.js component "UserService"    # component view
 node dist/bin/brain.js serve                       # GraphQL on 127.0.0.1:4123
 node dist/bin/brain.js mcp                          # MCP stdio server
-node dist/bin/brain.js backup                       # copy the DB to backups/
+node dist/bin/brain.js backup                       # archive the DB (encrypted if BRAIN_BACKUP_KEY set)
+node dist/bin/brain.js restore <file>               # restore a backup archive
 ```
 
 ### Knowledge markers (for `learn` / `learn_from_text`)
@@ -127,6 +128,7 @@ mutation { rememberReviewFinding(rule: "...", severity: "high", fix: "...") { id
 | `BRAIN_TOKEN_BUDGET` | `1500` | context block token budget |
 | `BRAIN_GRAPHQL_PORT` | `4123` | GraphQL port |
 | `BRAIN_OFFLINE` | – | `1` → forbid model downloads |
+| `BRAIN_BACKUP_KEY` | – | passphrase → `backup` produces an AES-256-GCM encrypted archive |
 
 ## Data model
 
@@ -165,5 +167,11 @@ npm test    # 25 tests, single-process; core round-trips, semantic search,
 
 ## Security (PRD §17)
 
-Fully local · no telemetry · no cloud · no tracking · backup via `brain backup`.
-All data lives under `BRAIN_HOME` and is never transmitted.
+Fully local · no telemetry · no cloud · no tracking. All data lives under
+`BRAIN_HOME` and is never transmitted.
+
+**Backups & encryptable storage:** `brain backup` packs the database into a
+single archive; with `BRAIN_BACKUP_KEY` set it is encrypted with AES-256-GCM
+(key derived via scrypt) — restore needs the same key. `brain restore <file>`
+restores it. Kuzu has no at-rest encryption of its own, so the live working
+copy is plaintext; the persisted/portable backup is what can be encrypted.

@@ -78,7 +78,20 @@ export class GraphDB {
     return rows;
   }
 
-  close(): void {
-    // Kuzu releases native resources on GC; nothing required for MVP.
+  /**
+   * Flush the write-ahead log into the main database file. Required before
+   * copying the files for a backup — uncheckpointed data lives only in the WAL
+   * and would be missing from a raw file copy.
+   */
+  async checkpoint(): Promise<void> {
+    await this.run("CHECKPOINT;");
   }
+
+  /**
+   * No-op: Kuzu releases native resources on GC / process exit. (Calling the
+   * binding's synchronous close() while other handles are live can crash the
+   * native layer, so we deliberately don't.) Always checkpoint() before relying
+   * on the on-disk file being current.
+   */
+  close(): void {}
 }
