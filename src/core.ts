@@ -102,4 +102,9 @@ export class Memory {
   close(): void {
     this.db.close();
   }
+
+  /** Really release the database file lock (for long-lived processes; see GraphDB.dispose). */
+  dispose(): void {
+    this.db.dispose();
+  }
 }

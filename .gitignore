@@ -11,3 +11,4 @@ extension/out/
 .models/
 # local memory store (never commit user data)
 .project-memory/
+.brain.lock

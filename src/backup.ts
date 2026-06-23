@@ -30,6 +30,7 @@ function listFiles(root: string): string[] {
         if (e.name === "backups") continue;
         walk(join(dir, e.name));
       } else if (e.isFile()) {
+        if (e.name === ".brain.lock") continue; // never ship the cross-process lock
         out.push(join(dir, e.name));
       }
     }

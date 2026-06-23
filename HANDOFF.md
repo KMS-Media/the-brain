@@ -73,7 +73,7 @@ Der gesamte MVP-Pflichtumfang (§19) + die in §16/§14 genannten Ziele sind umg
 - **GitHub-Integration** (`src/github.ts`, `brain github`) — Issues→Problem, PRs→Decision, Commit→PR via `gh` CLI
 - **VS-Code-Extension** (`extension/`) — eigenes Paket, kompiliert (`cd extension && npm install && npm run compile`), Thin-Client über die `brain` CLI
 
-Bekannt offen: Cross-Process-Locking (MCP-Server hält DB offen, während Hook-Prozess dieselbe DB öffnet) — bei Bedarf read-only-Opens / Lock-Handling prüfen. Echter HNSW-Vektorindex erst bei Millionen Nodes.
+Cross-Process-Locking GELÖST: Kuzu ist eine eingebettete Single-Writer-DB; mehrere Prozesse (MCP-Server, Hooks, CLI) auf derselben Datei kollidierten (Lock-Fehler + WAL-Races). Lösung: kooperativer, prozess-intern ref-gezählter Lockfile `.brain.lock` (`src/db/lock.ts`) serialisiert den Zugriff; `GraphDB.dispose()` schließt Kuzu via `closeSync` und gibt den Lock frei; der MCP-Server öffnet/schließt pro Tool-Aufruf (`withMemory`), statt die DB dauerhaft zu halten. `close()` == `dispose()`. Wichtig: `.brain.lock` ist vom Backup ausgeschlossen (sonst trägt der Restore einen toten Lock ins Ziel). Echter HNSW-Vektorindex erst bei Millionen Nodes.
 
 ## CI
 `.github/workflows/ci.yml` läuft bei Push auf main/dev und PRs: Job **quality** (npm ci + build + test auf Node 20 & 22, Modell-Cache) und **extension** (Extension kompilieren). Grün auf `main`.
