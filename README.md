@@ -28,7 +28,7 @@ your code and knowledge never leave your computer.
 
 ---
 
-## Install
+## [INSTALL](./INSTALL.md)
 
 ```bash
 # 1. Get the plugin
