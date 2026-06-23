@@ -85,6 +85,10 @@ node dist/bin/brain.js explore graph.html
 
 Run `node dist/bin/brain.js` with no arguments to see every command.
 
+> 🔎 **How it all fits together** — the retrieval-before-every-prompt flow, how
+> new knowledge is captured, and how to connect a local LLM — is documented in
+> [WORKFLOW.md](./WORKFLOW.md).
+
 ### Teaching it in plain text
 
 When you (or Claude) write a line starting with one of these markers, the_brain

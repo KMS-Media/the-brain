@@ -48,9 +48,10 @@ async function main() {
       break;
     }
     case "learn": {
+      const { isLLMEnabled } = await import("../llm.js");
       const mem = await Memory.open();
       const inputText = rest.length ? rest.join(" ") : await readStdin();
-      const created = await learn(mem, inputText);
+      const created = await learn(mem, inputText, { useLLM: isLLMEnabled() });
       console.log(`Stored ${created.length} item(s):`, created);
       mem.close();
       break;

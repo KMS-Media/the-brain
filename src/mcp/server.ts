@@ -199,7 +199,10 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
       description: "Scan free text for ADR/FINDING/LEARNED/RULE/NOTE markers and persist any found. Use on review summaries or notes.",
       inputSchema: { text: z.string() },
     },
-    async ({ text: t }) => text(await learn(memory, t)),
+    async ({ text: t }) => {
+      const { isLLMEnabled } = await import("../llm.js");
+      return text(await learn(memory, t, { useLLM: isLLMEnabled() }));
+    },
   );
 
   return server;
