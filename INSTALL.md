@@ -69,7 +69,7 @@ So bleibt das Plugin dauerhaft installiert, ohne Start-Flagge:
 
 ```text
 /plugin marketplace add /absoluter/pfad/zu/the-brain
-/plugin install the-brain@the-brain-marketplace
+/plugin install the_brain@the-brain-marketplace
 ```
 
 > Hinweis: Beim Installieren kopiert Claude Code den Plugin-Ordner in einen
@@ -174,6 +174,6 @@ Mehr Befehle und Optionen: [README.md](./README.md). Architektur & Interna:
 ## Deinstallieren
 
 - **Weg A:** einfach ohne `--plugin-dir` starten.
-- **Weg B:** `/plugin uninstall the-brain@the-brain-marketplace`
+- **Weg B:** `/plugin uninstall the_brain@the-brain-marketplace`
 - **Weg C:** `claude mcp remove the-brain` und den Hook-Block aus `settings.json` entfernen.
 - **Daten löschen:** den Projektordner unter `~/.claude-memory/` entfernen.

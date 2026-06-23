@@ -7,7 +7,7 @@
   "version": "0.1.0",
   "plugins": [
     {
-      "name": "the-brain",
+      "name": "the_brain",
       "source": "./",
       "description": "Local, persistent project memory for Claude Code, retrieved semantically before every prompt."
     }
