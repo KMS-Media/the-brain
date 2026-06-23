@@ -1,21 +1,20 @@
-# 🧠 the_brain — Installation & Einrichtung für Claude Code
+# 🧠 the_brain — Installation & Setup for Claude Code
 
-Eine Schritt-für-Schritt-Anleitung, um das Plugin lokal zu installieren und in
-Claude Code zu aktivieren. Alles läuft auf deinem Rechner — keine Cloud, keine
-Accounts.
+A step-by-step guide to installing the plugin locally and enabling it in Claude
+Code. Everything runs on your own machine — no cloud, no accounts.
 
 ---
 
-## Voraussetzungen
+## Requirements
 
-- **Node.js 20 oder neuer** — prüfen mit `node --version`
-- **Claude Code** (aktuell; das Plugin-System braucht eine neuere Version — falls
-  der Befehl `/plugin` fehlt, Claude Code aktualisieren)
+- **Node.js 20 or newer** — check with `node --version`
+- **Claude Code** (recent; the plugin system needs a newer version — if the
+  `/plugin` command is missing, update Claude Code)
 - **git**
 
 ---
 
-## Schritt 1 — Holen und bauen
+## Step 1 — Get it and build
 
 ```bash
 git clone https://github.com/KMS-Media/the-brain.git
@@ -24,71 +23,70 @@ npm install
 npm run build
 ```
 
-- `npm install` lädt die Abhängigkeiten (inkl. der lokalen Graph-DB und der
-  Embedding-Bibliothek). Falls dein npm Installations-Skripte blockiert, einmal
-  bestätigen, damit die nativen Komponenten gebaut werden.
-- `npm run build` erzeugt den Ordner `dist/` — den braucht das Plugin zur
-  Laufzeit.
-- Beim allerersten Start wird einmalig ein kleines Embedding-Modell (~30 MB)
-  heruntergeladen und zwischengespeichert; danach arbeitet alles offline.
+- `npm install` fetches the dependencies (including the local graph database and
+  the embedding library). If your npm blocks install scripts, approve them once
+  so the native components get built.
+- `npm run build` produces the `dist/` folder — the plugin needs it at runtime.
+- On the very first run a small embedding model (~30 MB) is downloaded once and
+  cached; after that everything works offline.
 
-> Merke dir den absoluten Pfad zum Ordner — du brauchst ihn gleich:
+> Note the absolute path to the folder — you'll need it in a moment:
 > ```bash
-> pwd     # z. B. /Users/du/projects/the-brain
+> pwd     # e.g. /Users/you/projects/the-brain
 > ```
 
 ---
 
-## Schritt 2 — In Claude Code laden
+## Step 2 — Load it into Claude Code
 
-Es gibt drei Wege. **Weg A ist für dieses Plugin am robustesten** (es lädt direkt
-aus dem Ordner; die nativen Abhängigkeiten und `dist/` werden zuverlässig
-gefunden).
+There are three ways. **Way A is the most robust for this plugin** (it loads
+straight from the folder, so the native dependencies and `dist/` are always
+found).
 
-### Weg A — direkt laden mit `--plugin-dir` (empfohlen)
+### Way A — load directly with `--plugin-dir` (recommended)
 
-Starte Claude Code mit dem Pfad zum Plugin:
-
-```bash
-claude --plugin-dir /absoluter/pfad/zu/the-brain
-```
-
-Das war's — Hook (Kontext vor jedem Prompt) und MCP-Server (Memory-Tools) sind
-aktiv. Damit du die Flagge nicht jedes Mal tippen musst, lege dir einen Alias an:
+Start Claude Code with the path to the plugin:
 
 ```bash
-# in ~/.zshrc bzw. ~/.bashrc
-alias claude-brain='claude --plugin-dir /absoluter/pfad/zu/the-brain'
+claude --plugin-dir /absolute/path/to/the-brain
 ```
 
-Nach Änderungen am Plugin im laufenden Claude Code: `/reload-plugins`.
+That's it — the hook (context before every prompt) and the MCP server (memory
+tools) are active. So you don't have to type the flag every time, add an alias:
 
-### Weg B — als lokaler Marketplace installieren (persistent)
+```bash
+# in ~/.zshrc or ~/.bashrc
+alias claude-brain='claude --plugin-dir /absolute/path/to/the-brain'
+```
 
-So bleibt das Plugin dauerhaft installiert, ohne Start-Flagge:
+After changing the plugin while Claude Code is running: `/reload-plugins`.
+
+### Way B — install as a local marketplace (persistent)
+
+This keeps the plugin installed permanently, without a startup flag:
 
 ```text
-/plugin marketplace add /absoluter/pfad/zu/the-brain
+/plugin marketplace add /absolute/path/to/the-brain
 /plugin install the_brain@the-brain-marketplace
 ```
 
-> Hinweis: Beim Installieren kopiert Claude Code den Plugin-Ordner in einen
-> Cache. Führe deshalb **vorher** `npm install` **und** `npm run build` aus.
-> Nach einem `git pull` / `npm update`: erneut bauen und
-> `/plugin marketplace update the-brain-marketplace` ausführen.
+> Note: on install, Claude Code copies the plugin folder into a cache. So run
+> `npm install` **and** `npm run build` **first**. After a `git pull` /
+> `npm update`: rebuild and run
+> `/plugin marketplace update the-brain-marketplace`.
 
-### Weg C — manuell einrichten (volle Kontrolle, kein Plugin-System)
+### Way C — wire it up manually (full control, no plugin system)
 
-Wenn du MCP-Server und Hook lieber selbst in deine Einstellungen einträgst:
+If you'd rather register the MCP server and hook in your own settings:
 
-**1. MCP-Server registrieren** (absoluter Pfad zu `dist/mcp/server.js`):
+**1. Register the MCP server** (absolute path to `dist/mcp/server.js`):
 
 ```bash
-claude mcp add the-brain -- node /absoluter/pfad/zu/the-brain/dist/mcp/server.js
+claude mcp add the-brain -- node /absolute/path/to/the-brain/dist/mcp/server.js
 ```
 
-**2. Hooks eintragen** in `~/.claude/settings.json` (für alle Projekte) oder
-`<projekt>/.claude/settings.json` (nur dieses Projekt) — **absolute Pfade**:
+**2. Add the hooks** in `~/.claude/settings.json` (all projects) or
+`<project>/.claude/settings.json` (this project only) — use **absolute paths**:
 
 ```json
 {
@@ -97,7 +95,7 @@ claude mcp add the-brain -- node /absoluter/pfad/zu/the-brain/dist/mcp/server.js
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "node /absoluter/pfad/zu/the-brain/dist/hooks/inject.js", "timeout": 30 }
+          { "type": "command", "command": "node /absolute/path/to/the-brain/dist/hooks/inject.js", "timeout": 30 }
         ]
       }
     ],
@@ -105,7 +103,7 @@ claude mcp add the-brain -- node /absoluter/pfad/zu/the-brain/dist/mcp/server.js
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "node /absoluter/pfad/zu/the-brain/dist/hooks/learn.js", "timeout": 30 }
+          { "type": "command", "command": "node /absolute/path/to/the-brain/dist/hooks/learn.js", "timeout": 30 }
         ]
       }
     ]
@@ -113,24 +111,23 @@ claude mcp add the-brain -- node /absoluter/pfad/zu/the-brain/dist/mcp/server.js
 }
 ```
 
-> Bei Weg C **absolute Pfade** verwenden — die Variable `${CLAUDE_PLUGIN_ROOT}`
-> (wie in den mitgelieferten Konfigs) wird nur im Plugin-Kontext (Weg A/B)
-> aufgelöst.
+> With Way C use **absolute paths** — the `${CLAUDE_PLUGIN_ROOT}` variable (as
+> used in the bundled configs) is only resolved in plugin context (Way A/B).
 
-Danach Claude Code neu starten.
+Then restart Claude Code.
 
 ---
 
-## Schritt 3 — Prüfen, ob es läuft
+## Step 3 — Verify it's working
 
 In Claude Code:
 
 ```text
-/plugin     →  the-brain sollte als aktiviert erscheinen (Weg B)
-/mcp        →  der Server "the-brain" sollte "connected" sein
+/plugin     →  the_brain should appear as enabled (Way B)
+/mcp        →  the "the-brain" server should be "connected"
 ```
 
-Schneller Funktionstest im Terminal (im Plugin-Ordner):
+Quick functional test in the terminal (inside the plugin folder):
 
 ```bash
 node dist/bin/brain.js init
@@ -138,42 +135,42 @@ node dist/bin/brain.js learn "DECISION: Use PostgreSQL | chosen for JSONB suppor
 node dist/bin/brain.js query "which database did we choose?"
 ```
 
-Die letzte Zeile sollte deine Entscheidung als Kontextblock zurückgeben.
+The last line should return your decision as a context block.
 
 ---
 
-## Schritt 4 — Loslegen
+## Step 4 — Get going
 
-1. Öffne dein Projekt in Claude Code (mit aktivem Plugin).
-2. Einmalig das Projekt einlesen (Struktur + Git-Historie ins Gedächtnis):
+1. Open your project in Claude Code (with the plugin enabled).
+2. Ingest the project once (structure + git history into memory):
    ```bash
    node dist/bin/brain.js ingest
    ```
-3. Arbeite normal. the_brain blendet vor jedem Prompt relevantes Wissen ein und
-   lernt aus Claudes Antworten dazu (Marker wie `DECISION:`, `FINDING[high]:`,
+3. Work as usual. the_brain surfaces relevant knowledge before every prompt and
+   learns from Claude's answers (markers like `DECISION:`, `FINDING[high]:`,
    `LEARNED:`, `RULE:`, `NOTE:`).
 
-Mehr Befehle und Optionen: [README.md](./README.md). Architektur & Interna:
+More commands and options: [README.md](./README.md). Architecture & internals:
 [DEVELOPER.md](./DEVELOPER.md).
 
 ---
 
 ## Troubleshooting
 
-| Problem | Lösung |
+| Problem | Fix |
 | --- | --- |
-| `/plugin` gibt es nicht | Claude Code aktualisieren |
-| `/mcp` zeigt the-brain nicht | `npm run build` ausgeführt? Claude Code neu starten / `/reload-plugins` |
-| `node: command not found` oder alte Version | Node.js 20+ installieren |
-| Erster Aufruf langsam | Einmaliger Modell-Download; danach schnell. Mit `BRAIN_OFFLINE=1` spätere Downloads verbieten |
-| Installationsskripte blockiert | Skripte für `kuzu`, `onnxruntime-node`, `sharp` zulassen und `npm install` wiederholen |
-| Nach Update startet MCP nicht (Weg B) | Neu bauen + `/plugin marketplace update the-brain-marketplace` |
+| `/plugin` doesn't exist | Update Claude Code |
+| `/mcp` doesn't show the-brain | Did you run `npm run build`? Restart Claude Code / `/reload-plugins` |
+| `node: command not found` or old version | Install Node.js 20+ |
+| First call is slow | One-time model download; fast afterwards. Use `BRAIN_OFFLINE=1` to forbid later downloads |
+| Install scripts blocked | Allow scripts for `kuzu`, `onnxruntime-node`, `sharp` and re-run `npm install` |
+| MCP doesn't start after an update (Way B) | Rebuild + `/plugin marketplace update the-brain-marketplace` |
 
 ---
 
-## Deinstallieren
+## Uninstalling
 
-- **Weg A:** einfach ohne `--plugin-dir` starten.
-- **Weg B:** `/plugin uninstall the_brain@the-brain-marketplace`
-- **Weg C:** `claude mcp remove the-brain` und den Hook-Block aus `settings.json` entfernen.
-- **Daten löschen:** den Projektordner unter `~/.claude-memory/` entfernen.
+- **Way A:** just start without `--plugin-dir`.
+- **Way B:** `/plugin uninstall the_brain@the-brain-marketplace`
+- **Way C:** `claude mcp remove the-brain` and remove the hook block from `settings.json`.
+- **Delete the data:** remove the project folder under `~/.claude-memory/`.
