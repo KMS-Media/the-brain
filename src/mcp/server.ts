@@ -10,19 +10,21 @@ import { learn } from "../learning/extractor.js";
  * CRITICAL: stdio transport reserves stdout for JSON-RPC. All diagnostics MUST
  * go to stderr (console.error), never console.log.
  *
+ * Concurrency: Kuzu permits only one read-write process per database file. This
+ * server is long-lived, so it must NOT hold the database open between calls —
+ * otherwise the prompt hooks and the `brain` CLI (separate processes) fail with
+ * a lock error. Each tool therefore opens the database via `withMemory`, runs,
+ * and disposes (releasing the lock) before returning. `GraphDB.openAt` retries
+ * on a brief lock contention.
+ *
  * Tools:
- *   memory_context        — assembled, prioritized context for a prompt (read)
- *   memory_search         — ranked raw hits (read)
- *   memory_component      — component-centric view (read)
- *   remember_decision     — persist an ADR (write)
- *   remember_experience   — persist a learned experience (write)
- *   remember_review_finding — persist a review finding (write)
- *   remember_knowledge    — persist general knowledge (write)
- *   remember_standard     — persist a coding standard (write)
- *   learn_from_text       — run the heuristic extractor over free text (write)
+ *   memory_context · memory_search · memory_component        (read)
+ *   remember_decision · remember_experience · remember_review_finding
+ *   remember_knowledge · remember_standard · learn_from_text (write)
+ *   ingest_repository · ingest_github                        (write)
+ *   curate_memory · consolidate_memory                       (maintenance)
  */
 export async function createMcpServer(projectPath?: string): Promise<McpServer> {
-  const memory = await Memory.open(projectPath);
   const server = new McpServer(
     { name: "the-brain", version: "0.1.0" },
     {
@@ -35,6 +37,16 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
 
   const text = (value: unknown) => ({ content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] });
 
+  // Open the DB, run fn, then release the file lock — never held between calls.
+  const withMemory = async <T>(fn: (m: Memory) => Promise<T>): Promise<T> => {
+    const m = await Memory.open(projectPath);
+    try {
+      return await fn(m);
+    } finally {
+      m.dispose();
+    }
+  };
+
   server.registerTool(
     "memory_context",
     {
@@ -42,10 +54,11 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
       description: "Return prioritized, deduplicated project memory (review findings, standards, decisions, architecture, experiences, knowledge) relevant to a task description. Call this before starting work.",
       inputSchema: { query: z.string().describe("The task or prompt to retrieve context for"), limit: z.number().optional() },
     },
-    async ({ query, limit }) => {
-      const ctx = await memory.context(query, limit ?? 30);
-      return text(ctx.markdown || ctx.summary);
-    },
+    async ({ query, limit }) =>
+      withMemory(async (memory) => {
+        const ctx = await memory.context(query, limit ?? 30);
+        return text(ctx.markdown || ctx.summary);
+      }),
   );
 
   server.registerTool(
@@ -55,10 +68,11 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
       description: "Semantic + graph search over project memory. Returns ranked nodes with scores.",
       inputSchema: { query: z.string(), limit: z.number().optional() },
     },
-    async ({ query, limit }) => {
-      const hits = await memory.search(query, limit ?? 20);
-      return text(hits.map((h) => ({ label: h.label, id: h.id, score: Number(h.score.toFixed(3)), ...h.props, embedding: undefined })));
-    },
+    async ({ query, limit }) =>
+      withMemory(async (memory) => {
+        const hits = await memory.search(query, limit ?? 20);
+        return text(hits.map((h) => ({ label: h.label, id: h.id, score: Number(h.score.toFixed(3)), ...h.props, embedding: undefined })));
+      }),
   );
 
   server.registerTool(
@@ -68,7 +82,7 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
       description: "Return decisions, dependencies, review findings and experiences related to a named component.",
       inputSchema: { name: z.string() },
     },
-    async ({ name }) => text(await memory.component(name)),
+    async ({ name }) => withMemory(async (memory) => text(await memory.component(name))),
   );
 
   server.registerTool(
@@ -84,7 +98,8 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
         alternatives: z.string().optional(),
       },
     },
-    async (args) => text(await memory.repo.upsertNode("Decision", { ...args, date: new Date().toISOString().slice(0, 10) })),
+    async (args) =>
+      withMemory(async (memory) => text(await memory.repo.upsertNode("Decision", { ...args, date: new Date().toISOString().slice(0, 10) }))),
   );
 
   server.registerTool(
@@ -94,7 +109,7 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
       description: "Persist a problem→solution experience for reuse.",
       inputSchema: { problem: z.string(), solution: z.string(), outcome: z.string().optional(), confidence: z.number().optional() },
     },
-    async (args) => text(await memory.repo.upsertNode("Experience", args)),
+    async (args) => withMemory(async (memory) => text(await memory.repo.upsertNode("Experience", args))),
   );
 
   server.registerTool(
@@ -110,7 +125,7 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
         fix: z.string().optional(),
       },
     },
-    async (args) => text(await memory.repo.upsertNode("ReviewFinding", { frequency: 1, ...args })),
+    async (args) => withMemory(async (memory) => text(await memory.repo.upsertNode("ReviewFinding", { frequency: 1, ...args }))),
   );
 
   server.registerTool(
@@ -120,7 +135,7 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
       description: "Persist general project knowledge.",
       inputSchema: { title: z.string(), content: z.string(), tags: z.array(z.string()).optional(), importance: z.number().optional() },
     },
-    async (args) => text(await memory.repo.upsertNode("Knowledge", args)),
+    async (args) => withMemory(async (memory) => text(await memory.repo.upsertNode("Knowledge", args))),
   );
 
   server.registerTool(
@@ -130,7 +145,7 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
       description: "Persist a project coding standard / rule.",
       inputSchema: { name: z.string(), description: z.string(), examples: z.string().optional() },
     },
-    async (args) => text(await memory.repo.upsertNode("CodingStandard", args)),
+    async (args) => withMemory(async (memory) => text(await memory.repo.upsertNode("CodingStandard", args))),
   );
 
   server.registerTool(
@@ -140,10 +155,11 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
       description: "Pull GitHub issues (→ Problem nodes) and pull requests (→ Decision nodes) via the gh CLI, and link commits that reference a PR. Requires gh to be installed and authenticated.",
       inputSchema: { limit: z.number().optional().describe("Max issues/PRs to fetch (default 100)") },
     },
-    async ({ limit }) => {
-      const { ingestGitHub } = await import("../github.js");
-      return text(await ingestGitHub(memory, { limit, cwd: projectPath }));
-    },
+    async ({ limit }) =>
+      withMemory(async (memory) => {
+        const { ingestGitHub } = await import("../github.js");
+        return text(await ingestGitHub(memory, { limit, cwd: projectPath }));
+      }),
   );
 
   server.registerTool(
@@ -153,11 +169,11 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
       description: "Scan the project's git work tree into the graph: Project, Directory and File nodes with CONTAINS edges, plus recent GitCommit nodes with MODIFIES edges. Run once per project and after large changes.",
       inputSchema: { gitLimit: z.number().optional().describe("How many recent commits to ingest (default 100)") },
     },
-    async ({ gitLimit }) => {
-      const { ingest } = await import("../ingest/index.js");
-      const res = await ingest(memory, projectPath, gitLimit ?? 100);
-      return text(res);
-    },
+    async ({ gitLimit }) =>
+      withMemory(async (memory) => {
+        const { ingest } = await import("../ingest/index.js");
+        return text(await ingest(memory, projectPath, gitLimit ?? 100));
+      }),
   );
 
   server.registerTool(
@@ -170,10 +186,11 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
         prune: z.boolean().optional().describe("Also delete stale, unused, low-importance knowledge"),
       },
     },
-    async ({ dryRun, prune }) => {
-      const { curate } = await import("../curate.js");
-      return text(await curate(memory, { dryRun, prune }));
-    },
+    async ({ dryRun, prune }) =>
+      withMemory(async (memory) => {
+        const { curate } = await import("../curate.js");
+        return text(await curate(memory, { dryRun, prune }));
+      }),
   );
 
   server.registerTool(
@@ -186,10 +203,11 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
         dryRun: z.boolean().optional().describe("Preview without modifying the graph"),
       },
     },
-    async ({ threshold, dryRun }) => {
-      const { consolidate } = await import("../consolidate.js");
-      return text(await consolidate(memory, { threshold, dryRun }));
-    },
+    async ({ threshold, dryRun }) =>
+      withMemory(async (memory) => {
+        const { consolidate } = await import("../consolidate.js");
+        return text(await consolidate(memory, { threshold, dryRun }));
+      }),
   );
 
   server.registerTool(
@@ -199,10 +217,11 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
       description: "Scan free text for ADR/FINDING/LEARNED/RULE/NOTE markers and persist any found. Use on review summaries or notes.",
       inputSchema: { text: z.string() },
     },
-    async ({ text: t }) => {
-      const { isLLMEnabled } = await import("../llm.js");
-      return text(await learn(memory, t, { useLLM: isLLMEnabled() }));
-    },
+    async ({ text: t }) =>
+      withMemory(async (memory) => {
+        const { isLLMEnabled } = await import("../llm.js");
+        return text(await learn(memory, t, { useLLM: isLLMEnabled() }));
+      }),
   );
 
   return server;

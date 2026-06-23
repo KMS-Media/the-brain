@@ -1,6 +1,7 @@
 import * as kuzu from "kuzu";
 import { dbPath, ensureDir, resolveStorageDir, MAX_DB_SIZE, BUFFER_POOL_SIZE } from "../config.js";
 import { ALL_DDL, MIGRATIONS } from "./schema.js";
+import { acquireLock, type LockHandle } from "./lock.js";
 
 /**
  * Thin async wrapper around the Kuzu embedded graph database.
@@ -14,14 +15,25 @@ import { ALL_DDL, MIGRATIONS } from "./schema.js";
  * Array params (FLOAT[N], STRING[]) bind from JS arrays. `array_cosine_similarity`
  * is available natively.
  */
+/** Kuzu allows only one read-write process per database file at a time. */
+function isLockError(e: unknown): boolean {
+  return /lock|IO exception/i.test(String((e as Error)?.message ?? e));
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export class GraphDB {
   readonly storageDir: string;
   private db: kuzu.Database;
   private conn: kuzu.Connection;
+  private lock: LockHandle;
 
-  private constructor(storageDir: string) {
+  /** Storage dirs already migrated in THIS process — skip the idempotent DDL on reopen. */
+  private static migrated = new Set<string>();
+
+  private constructor(storageDir: string, lock: LockHandle) {
     this.storageDir = storageDir;
-    ensureDir(storageDir);
+    this.lock = lock;
     // Args: path, bufferManagerSize, enableCompression, readOnly, maxDBSize.
     // Capping both the buffer pool (else ~80% RAM per Database) and maxDBSize
     // (else an 8 TiB mmap reservation) keeps each store's footprint modest so
@@ -32,21 +44,51 @@ export class GraphDB {
 
   /** Open (and create+migrate) the database for a project path. */
   static async open(projectPath?: string): Promise<GraphDB> {
-    const dir = resolveStorageDir(projectPath);
-    const g = new GraphDB(dir);
-    await g.migrate();
-    return g;
+    return GraphDB.openAt(resolveStorageDir(projectPath));
   }
 
-  /** Open at an explicit storage directory (used by tests). */
-  static async openAt(storageDir: string): Promise<GraphDB> {
-    const g = new GraphDB(storageDir);
-    await g.migrate();
-    return g;
+  /**
+   * Open at an explicit storage directory. Access across processes is serialized
+   * by a cooperative lockfile (see lock.ts), so the long-lived MCP server, the
+   * prompt hooks and the CLI never collide on Kuzu's single-writer file. A small
+   * Kuzu-level retry remains as a safety net for any residual races.
+   */
+  static async openAt(storageDir: string, retries = 8): Promise<GraphDB> {
+    ensureDir(storageDir);
+    const lock = await acquireLock(storageDir);
+    let lastErr: unknown;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      let g: GraphDB;
+      try {
+        g = new GraphDB(storageDir, lock);
+        await g.migrate();
+        return g;
+      } catch (e) {
+        lastErr = e;
+        try {
+          (g! as GraphDB | undefined)?.disposeKuzu();
+        } catch {
+          /* ignore */
+        }
+        if (isLockError(e) && attempt < retries) {
+          await sleep(Math.min(400, 60 * (attempt + 1)) + Math.floor(Math.random() * 60));
+          continue;
+        }
+        lock.release(); // give up — don't leak the lockfile
+        throw e;
+      }
+    }
+    lock.release();
+    throw lastErr;
   }
 
   /** Run all DDL idempotently, then apply column migrations for older DBs. */
   async migrate(): Promise<void> {
+    if (GraphDB.migrated.has(this.storageDir)) {
+      // Touch the connection so a stale lock still surfaces here (and is retried).
+      await this.run("RETURN 1;");
+      return;
+    }
     for (const ddl of ALL_DDL) {
       await this.run(ddl);
     }
@@ -57,6 +99,7 @@ export class GraphDB {
         // Best-effort: a missing table (never created) or unsupported clause is non-fatal.
       }
     }
+    GraphDB.migrated.add(this.storageDir);
   }
 
   /** Execute a raw Cypher statement with no parameters. */
@@ -92,10 +135,37 @@ export class GraphDB {
   }
 
   /**
-   * No-op: Kuzu releases native resources on GC / process exit. (Calling the
-   * binding's synchronous close() while other handles are live can crash the
-   * native layer, so we deliberately don't.) Always checkpoint() before relying
-   * on the on-disk file being current.
+   * Close the database and release the cross-process lock. Identical to
+   * dispose() — every caller must release the lockfile it acquired in openAt(),
+   * otherwise a later open of the same store (even in the same process, e.g.
+   * cross-project search) would deadlock on the lock.
    */
-  close(): void {}
+  close(): void {
+    this.dispose();
+  }
+
+  /** Close the Kuzu handles only (not the cross-process lock). */
+  private disposeKuzu(): void {
+    try {
+      (this.conn as { closeSync?: () => void }).closeSync?.();
+    } catch {
+      /* already closed */
+    }
+    try {
+      (this.db as { closeSync?: () => void }).closeSync?.();
+    } catch {
+      /* already closed */
+    }
+  }
+
+  /**
+   * Really close the database AND release the cross-process lockfile. A
+   * long-lived holder (the MCP server) must call this after each operation so
+   * the prompt hooks and the CLI can take their turn — Kuzu allows only one
+   * read-write process per file.
+   */
+  dispose(): void {
+    this.disposeKuzu();
+    this.lock.release();
+  }
 }
