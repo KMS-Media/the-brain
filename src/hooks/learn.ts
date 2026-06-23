@@ -77,9 +77,10 @@ export async function handleStop(payload: StopPayload): Promise<{ label: string;
 
   const { Memory } = await import("../core.js");
   const { learn } = await import("../learning/extractor.js");
+  const { isLLMEnabled } = await import("../llm.js");
   const mem = await Memory.open(payload.cwd);
   try {
-    return await learn(mem, text);
+    return await learn(mem, text, { useLLM: isLLMEnabled() });
   } finally {
     mem.close();
   }
