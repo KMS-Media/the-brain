@@ -6,7 +6,6 @@
   "description": "Local, persistent project memory for Claude Code: a Kuzu-backed knowledge graph of decisions, review findings, coding standards, experiences and project knowledge, retrieved semantically before every prompt.",
   "displayName": "the_brain — Local Memory",
   "version": "0.1.0",
-  "hooks": "./hooks/hooks.json",
   "mcpServers": {
     "the-brain": {
       "command": "node",
