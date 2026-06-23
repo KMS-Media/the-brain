@@ -45,18 +45,20 @@ locally. After that it works fully offline.
 
 ### Add it to Claude Code
 
-This repo is a ready-made Claude Code plugin. Point Claude Code at this folder
-as a plugin and you get both:
+This repo is a ready-made Claude Code plugin. The quickest way to load it:
 
-- **Automatic context** before every prompt (via the included hook), and
-- **Memory tools** Claude can call (via the included MCP server).
+```bash
+claude --plugin-dir /absolute/path/to/the-brain
+```
 
-After building, restart Claude Code and run `/mcp` to confirm the **the-brain**
-server is connected. That's it — Claude will start building and using memory as
-you work.
+You then get both **automatic context** before every prompt (via the included
+hook) and **memory tools** Claude can call (via the included MCP server). Run
+`/mcp` to confirm the **the-brain** server is connected.
 
-> Prefer to wire it up manually or learn how it works under the hood? See
-> [DEVELOPER.md](./DEVELOPER.md).
+> 📖 **Full step-by-step setup — including a permanent install, manual wiring,
+> verification and troubleshooting — is in [INSTALL.md](./INSTALL.md).**
+>
+> Want to know how it works under the hood? See [DEVELOPER.md](./DEVELOPER.md).
 
 ---
 
