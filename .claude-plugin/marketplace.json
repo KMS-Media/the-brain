@@ -1,0 +1,15 @@
+{
+  "name": "the-brain-marketplace",
+  "owner": {
+    "name": "Kai-Michael Schwendig"
+  },
+  "description": "Local, persistent project memory for Claude Code: a Kuzu-backed knowledge graph of decisions, review findings, coding standards, experiences and project knowledge, retrieved semantically before every prompt.",
+  "version": "0.1.0",
+  "plugins": [
+    {
+      "name": "the-brain",
+      "source": "./",
+      "description": "Local, persistent project memory for Claude Code, retrieved semantically before every prompt."
+    }
+  ]
+}
