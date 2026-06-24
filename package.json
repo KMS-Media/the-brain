@@ -22,7 +22,7 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.0.0",
+    "@huggingface/transformers": "^4.2.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "graphql": "^16.9.0",
     "graphql-scalars": "^1.23.0",
@@ -38,7 +38,7 @@
   "allowScripts": {
     "esbuild@0.28.1": true,
     "kuzu@0.11.3": true,
-    "onnxruntime-node@1.21.0": true,
+    "onnxruntime-node@1.24.3": true,
     "protobufjs@7.6.4": true,
     "sharp@0.34.5": true
   },
