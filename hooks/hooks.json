@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/inject.js\"",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/inject.sh\"",
             "timeout": 30,
             "statusMessage": "🧠 Loading project memory..."
           }
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/learn.js\"",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/learn.sh\"",
             "timeout": 30,
             "statusMessage": "🧠 Learning from response..."
           }
