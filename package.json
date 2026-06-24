@@ -41,5 +41,10 @@
     "onnxruntime-node@1.21.0": true,
     "protobufjs@7.6.4": true,
     "sharp@0.34.5": true
+  },
+  "overrides": {
+    "cmake-js": {
+      "tar": "^7.5.16"
+    }
   }
 }
