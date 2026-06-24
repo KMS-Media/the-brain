@@ -7,7 +7,7 @@ A local, persistent **project memory** for Claude Code. It gives Claude a long-t
 graph-backed memory of decisions, review findings, coding standards, experiences
 and project knowledge — and injects the relevant pieces **before every prompt**.
 
-Implements the PRD in [`Anforderungen.md`](./Anforderungen.md). Everything runs
+Implements the PRD. Everything runs
 **100 % locally**: no cloud, no telemetry, no external embedding APIs (PRD §3, §17).
 
 ## What it does

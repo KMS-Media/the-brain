@@ -12,3 +12,8 @@ extension/out/
 # local memory store (never commit user data)
 .project-memory/
 .brain.lock
+
+# Planning / handoff docs (no longer tracked)
+Anforderungen.md
+PLAN.md
+HANDOFF.md
