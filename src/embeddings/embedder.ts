@@ -52,7 +52,7 @@ async function getExtractor(): Promise<FeatureExtractor> {
   if (!extractorPromise) {
     env.cacheDir = ensureDir(modelCacheDir());
     env.allowRemoteModels = process.env.BRAIN_OFFLINE === "1" ? false : true;
-    extractorPromise = pipeline("feature-extraction", EMBEDDING_MODEL) as unknown as Promise<FeatureExtractor>;
+    extractorPromise = pipeline("feature-extraction", EMBEDDING_MODEL, { dtype: "fp32" }) as unknown as Promise<FeatureExtractor>;
   }
   return extractorPromise;
 }
