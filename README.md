@@ -157,8 +157,12 @@ network calls except the one-time model download (which you can disable with
 - **`node: command not found` / old Node** — install Node.js 20+.
 
 ---
-
-## License & contributing
-
 See [DEVELOPER.md](./DEVELOPER.md) for architecture, the full command reference,
 configuration options, and how to build on the plugin.
+
+## License
+
+the_brain itself is released under the **GNU Affero General Public License v3.0
+or later** (AGPL-3.0-or-later). See [LICENSE](./LICENSE) and [ACKNOWLEDGMENTS](./ACKNOWLEDGMENTS.md) for the full text.
+
+
