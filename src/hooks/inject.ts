@@ -42,4 +42,4 @@ async function main() {
   process.stdout.write(ctx.markdown + "\n");
 }
 
-main().catch(() => {}).finally(() => process.exit(0));
+main().catch((err) => console.error("inject hook failed:", err)).finally(() => process.exit(0));
