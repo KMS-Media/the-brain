@@ -14,10 +14,14 @@ import { join, resolve } from "node:path";
  * (e.g. cross-project search opens many), so the lock is reference-counted in
  * memory: the on-disk lockfile is taken when the first handle opens a store and
  * removed when the last one closes. A stale lockfile (holder crashed) is broken
- * after `STALE_MS`.
+ * early via a PID reachability check (process.kill pid,0) with an mtime-based
+ * fallback after `BRAIN_LOCK_STALE_MS` (default 15s).
  */
 
-const STALE_MS = 60_000;
+const STALE_MS = Math.max(
+  1_000,
+  Number(process.env.BRAIN_LOCK_STALE_MS) || 15_000,
+);
 
 export interface LockHandle {
   release(): void;
@@ -108,7 +112,8 @@ async function takeFileLock(storageDir: string, timeoutMs: number): Promise<() =
   }
 }
 
-export async function acquireLock(storageDir: string, timeoutMs = 10_000): Promise<LockHandle> {
+export async function acquireLock(storageDir: string, timeoutMs?: number): Promise<LockHandle> {
+  timeoutMs ??= Math.max(100, Number(process.env.BRAIN_LOCK_TIMEOUT) || 10_000);
   const key = resolve(storageDir);
   const existing = held.get(key);
   if (existing) {

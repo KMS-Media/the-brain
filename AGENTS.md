@@ -50,6 +50,8 @@ Entrypoints (all require `npm run build` first):
 | `BRAIN_TOKEN_BUDGET` | `1500` | max context tokens per prompt |
 | `BRAIN_GRAPHQL_PORT` | `4123` | GraphQL server port |
 | `BRAIN_BACKUP_KEY` | — | passphrase for encrypted backups |
+| `BRAIN_LOCK_TIMEOUT` | `10000` | max ms to wait for the lock before throwing |
+| `BRAIN_LOCK_STALE_MS` | `15000` | mtime age after which a stale lockfile is broken |
 
 ## Loading the plugin in Claude Code
 
