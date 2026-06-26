@@ -1,4 +1,4 @@
-import { openSync, closeSync, writeSync, rmSync, statSync } from "node:fs";
+import { openSync, closeSync, writeSync, rmSync, statSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 /**
@@ -33,6 +33,29 @@ const held = new Map<string, Held>();
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Read the PID from lockfile, or null if missing/invalid. */
+function readPidFromLock(lockPath: string): number | null {
+  try {
+    const content = readFileSync(lockPath, "utf8").trim();
+    if (!content) return null;
+    const pid = parseInt(content, 10);
+    return Number.isFinite(pid) && pid > 0 ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Check if a process with the given PID is still alive (POSIX signal 0). */
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    const err = e as NodeJS.ErrnoException;
+    return err.code !== "ESRCH";
+  }
+}
+
 /** Take the on-disk lockfile (cross-process), waiting/breaking-stale as needed. */
 async function takeFileLock(storageDir: string, timeoutMs: number): Promise<() => void> {
   const lockPath = join(storageDir, ".brain.lock");
@@ -59,6 +82,16 @@ async function takeFileLock(storageDir: string, timeoutMs: number): Promise<() =
         remove();
       };
     } catch {
+      // PID check: if the holder process is dead, break the lock immediately.
+      try {
+        const pid = readPidFromLock(lockPath);
+        if (pid !== null && !isPidAlive(pid)) {
+          rmSync(lockPath, { force: true });
+          continue;
+        }
+      } catch {
+        /* fall through to mtime check */
+      }
       try {
         if (Date.now() - statSync(lockPath).mtimeMs > STALE_MS) {
           rmSync(lockPath, { force: true });
