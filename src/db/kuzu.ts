@@ -165,7 +165,13 @@ export class GraphDB {
    * read-write process per file.
    */
   dispose(): void {
-    this.disposeKuzu();
+    try {
+      this.disposeKuzu();
+    } catch {
+      // Kuzu/ONNX native destructors are known to throw or abort during close.
+      // The lock MUST be released regardless — a leaked lock blocks every
+      // other process (hooks, MCP, CLI) for up to STALE_MS.
+    }
     this.lock.release();
   }
 }
