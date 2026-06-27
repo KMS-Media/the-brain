@@ -14,13 +14,19 @@ import { join, resolve } from "node:path";
  * (e.g. cross-project search opens many), so the lock is reference-counted in
  * memory: the on-disk lockfile is taken when the first handle opens a store and
  * removed when the last one closes. A stale lockfile (holder crashed) is broken
- * early via a PID reachability check (process.kill pid,0) with an mtime-based
- * fallback after `BRAIN_LOCK_STALE_MS` (default 15s).
+ * early via a PID reachability check (process.kill pid,0). An mtime-based
+ * fallback after `BRAIN_LOCK_STALE_MS` (default 60s) only applies when the
+ * holder PID can't be read (empty/older lockfile); a lock held by a live
+ * process is never broken, no matter how long it has been held.
  */
 
+// mtime fallback only fires when the holder PID is unknown (older lockfile
+// format / empty file). The PID reachability check is the primary stale
+// detector, so this stays conservative to avoid breaking a legitimately
+// long-running holder (curate/ingest/first embed) whose PID we just can't read.
 const STALE_MS = Math.max(
   1_000,
-  Number(process.env.BRAIN_LOCK_STALE_MS) || 15_000,
+  Number(process.env.BRAIN_LOCK_STALE_MS) || 60_000,
 );
 
 export interface LockHandle {
@@ -86,23 +92,30 @@ async function takeFileLock(storageDir: string, timeoutMs: number): Promise<() =
         remove();
       };
     } catch {
-      // PID check: if the holder process is dead, break the lock immediately.
-      try {
-        const pid = readPidFromLock(lockPath);
-        if (pid !== null && !isPidAlive(pid)) {
+      // Holder still present. Decide whether it's stale.
+      //
+      // 1. PID reachability is the primary, authoritative check: if we can read
+      //    the holder PID and it is dead, break immediately. If it is ALIVE the
+      //    lock is valid by definition — never break it (a long-running holder
+      //    must not be evicted just because it has held the lock a while), so we
+      //    skip the mtime fallback entirely and keep waiting.
+      // 2. mtime fallback only when the PID is unknown (empty/older lockfile).
+      const pid = readPidFromLock(lockPath);
+      if (pid !== null) {
+        if (!isPidAlive(pid)) {
           rmSync(lockPath, { force: true });
           continue;
         }
-      } catch {
-        /* fall through to mtime check */
-      }
-      try {
-        if (Date.now() - statSync(lockPath).mtimeMs > STALE_MS) {
-          rmSync(lockPath, { force: true });
-          continue;
+        // holder alive → fall through to the wait/timeout below, no break
+      } else {
+        try {
+          if (Date.now() - statSync(lockPath).mtimeMs > STALE_MS) {
+            rmSync(lockPath, { force: true });
+            continue;
+          }
+        } catch {
+          continue; // lockfile vanished between attempts — retry immediately
         }
-      } catch {
-        continue; // lockfile vanished between attempts — retry immediately
       }
       if (Date.now() - start > timeoutMs) {
         throw new Error(`Timed out waiting for the the_brain database lock (${lockPath}).`);
