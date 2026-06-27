@@ -99,5 +99,5 @@ async function main() {
 
 // Only run as a hook when executed directly, not when imported by tests.
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch(() => {}).finally(() => process.exit(0));
+  main().catch((err) => console.error("learn hook failed:", err)).finally(() => process.exit(0));
 }

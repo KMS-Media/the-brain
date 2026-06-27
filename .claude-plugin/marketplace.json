@@ -4,7 +4,7 @@
     "name": "KMS"
   },
   "description": "Local, persistent project memory for Claude Code: a Kuzu-backed knowledge graph of decisions, review findings, coding standards, experiences and project knowledge, retrieved semantically before every prompt.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "plugins": [
     {
       "name": "the_brain",
