@@ -192,8 +192,9 @@ async function main() {
       break;
     }
     case "mcp": {
-      const { createMcpServer } = await import("../mcp/server.js");
+      const { createMcpServer, installProcessGuards } = await import("../mcp/server.js");
       const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
+      installProcessGuards();
       const server = await createMcpServer();
       await server.connect(new StdioServerTransport());
       console.error("🧠 the-brain MCP server running on stdio");
