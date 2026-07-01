@@ -4,18 +4,127 @@ import { z } from "zod";
 import { Memory } from "../core.js";
 import { learn } from "../learning/extractor.js";
 
+/** Idle window after the last call before the DB handle (and lockfile) is released. */
+const MCP_IDLE_MS = Math.max(0, Number(process.env.BRAIN_MCP_IDLE_MS) || 3_000);
+
+/**
+ * Holds a single {@link Memory} open across tool calls and serializes access to
+ * it, releasing the underlying Kuzu handle + cross-process lock only after the
+ * server has been idle for {@link MCP_IDLE_MS}.
+ *
+ * Why not open/close per call: Kuzu's native close can `abort()` the process
+ * (uncatchable in JS), so doing it on every request was the main cause of the
+ * MCP server dropping its connection. Why not hold it open forever: the prompt
+ * hooks and the `brain` CLI are separate processes that need the single-writer
+ * lock, so we hand it back once the session goes quiet.
+ *
+ * All work (open, run, idle-release) runs on one promise chain, so the handle is
+ * never disposed while a call is in flight and concurrent calls never race on
+ * the single Kuzu connection.
+ */
+export class MemoryGate {
+  private memory: Memory | null = null;
+  private chain: Promise<unknown> = Promise.resolve();
+  private idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * @param opener how to open the Memory (production: `() => Memory.open(projectPath)`)
+   * @param idleMs idle window before the handle + lock are released
+   */
+  constructor(
+    private readonly opener: () => Promise<Memory>,
+    private readonly idleMs: number = MCP_IDLE_MS,
+  ) {}
+
+  run<T>(fn: (m: Memory) => Promise<T>): Promise<T> {
+    const result = this.chain.then(async () => {
+      this.cancelIdle();
+      const memory = this.memory ?? (this.memory = await this.opener());
+      try {
+        return await fn(memory);
+      } finally {
+        this.scheduleIdle();
+      }
+    });
+    // Keep the chain alive (and swallow its settlement) so one failing call
+    // never breaks serialization for the next one. Callers still see `result`.
+    this.chain = result.then(() => undefined, () => undefined);
+    return result as Promise<T>;
+  }
+
+  private scheduleIdle(): void {
+    this.cancelIdle();
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = null;
+      // Release on the chain so we never dispose mid-call.
+      this.chain = this.chain.then(() => this.release(), () => this.release());
+    }, this.idleMs);
+    this.idleTimer.unref?.();
+  }
+
+  private cancelIdle(): void {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
+  }
+
+  /** Release the handle + lock now, after any in-flight call settles. */
+  async close(): Promise<void> {
+    this.cancelIdle();
+    const done = this.chain.then(() => this.release(), () => this.release());
+    this.chain = done.then(() => undefined, () => undefined);
+    await done;
+  }
+
+  private release(): void {
+    const memory = this.memory;
+    this.memory = null;
+    try {
+      memory?.dispose();
+    } catch {
+      // Native teardown may throw; the lock is released inside dispose() regardless.
+    }
+  }
+}
+
+/**
+ * Keep the long-lived MCP server alive on stray errors. A single unhandled
+ * rejection would otherwise terminate the process (Node default) and drop the
+ * stdio connection. Diagnostics go to stderr — stdout is reserved for JSON-RPC.
+ */
+let guardsInstalled = false;
+export function installProcessGuards(): void {
+  if (guardsInstalled) return;
+  guardsInstalled = true;
+  process.on("uncaughtException", (err) => {
+    console.error("the-brain MCP: uncaughtException (kept alive):", err);
+  });
+  process.on("unhandledRejection", (reason) => {
+    console.error("the-brain MCP: unhandledRejection (kept alive):", reason);
+  });
+}
+
 /**
  * MCP server — the primary Claude Code integration surface.
  *
  * CRITICAL: stdio transport reserves stdout for JSON-RPC. All diagnostics MUST
  * go to stderr (console.error), never console.log.
  *
- * Concurrency: Kuzu permits only one read-write process per database file. This
- * server is long-lived, so it must NOT hold the database open between calls —
- * otherwise the prompt hooks and the `brain` CLI (separate processes) fail with
- * a lock error. Each tool therefore opens the database via `withMemory`, runs,
- * and disposes (releasing the lock) before returning. `GraphDB.openAt` retries
- * on a brief lock contention.
+ * Concurrency: Kuzu permits only one read-write process per database file, so
+ * the server must release the database (and its cross-process lockfile) when it
+ * is not actively serving a call — otherwise the prompt hooks and the `brain`
+ * CLI (separate processes) fail with a lock error.
+ *
+ * It must NOT, however, open and close the native Kuzu handle on every single
+ * call: Kuzu's native destructors can `abort()` during close (see
+ * GraphDB.dispose), and an abort is a hard process termination that no JS
+ * try/catch can intercept — repeated per-call teardown was crashing the server
+ * and dropping the MCP connection. Instead `MemoryGate` keeps ONE Memory open,
+ * serializes calls through it, and releases it only after a short idle window
+ * (BRAIN_MCP_IDLE_MS, default 3s). Bursts of tool calls reuse a single handle
+ * (no churn), and the lock is still handed back to hooks/CLI when the session
+ * goes quiet. `GraphDB.openAt` retries on brief lock contention.
  *
  * Tools:
  *   memory_context · memory_search · memory_component        (read)
@@ -37,15 +146,9 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
 
   const text = (value: unknown) => ({ content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] });
 
-  // Open the DB, run fn, then release the file lock — never held between calls.
-  const withMemory = async <T>(fn: (m: Memory) => Promise<T>): Promise<T> => {
-    const m = await Memory.open(projectPath);
-    try {
-      return await fn(m);
-    } finally {
-      m.dispose();
-    }
-  };
+  // Serialize every tool call through a single, idle-released Memory handle.
+  const gate = new MemoryGate(() => Memory.open(projectPath));
+  const withMemory = <T>(fn: (m: Memory) => Promise<T>): Promise<T> => gate.run(fn);
 
   server.registerTool(
     "memory_context",
@@ -229,6 +332,7 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
 
 // Entry point: `tsx src/mcp/server.ts` / `npm run mcp` / brain mcp
 if (import.meta.url === `file://${process.argv[1]}`) {
+  installProcessGuards();
   createMcpServer()
     .then(async (server) => {
       const transport = new StdioServerTransport();
