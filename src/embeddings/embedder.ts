@@ -17,6 +17,18 @@ type FeatureExtractor = (
 let extractorPromise: Promise<FeatureExtractor> | null = null;
 
 /**
+ * Completion time of the most recent REAL (native ONNX) embedding call.
+ * A native Kuzu close within ~0–100 ms of a real embedding call can segfault
+ * the process (see Memory.disposeSafely); fake-mode embeds don't count because
+ * the race only involves the native runtime.
+ */
+let lastRealEmbedAt = 0;
+
+export function lastRealEmbedTime(): number {
+  return lastRealEmbedAt;
+}
+
+/**
  * Deterministic hashing-vectorizer embedding used only when BRAIN_FAKE_EMBED=1
  * (the test runner sets this). It avoids loading the native ONNX model — which
  * is unstable across many short-lived processes in CI — while preserving
@@ -64,6 +76,7 @@ export async function embed(text: string): Promise<number[]> {
   if (useFakeEmbed()) return fakeEmbed(clean);
   const extractor = await getExtractor();
   const out = await extractor([clean], { pooling: "mean", normalize: true });
+  lastRealEmbedAt = Date.now();
   return Array.from(out.data as Float32Array);
 }
 
@@ -76,6 +89,7 @@ export async function embedBatch(texts: string[]): Promise<number[][]> {
     texts.map((t) => (t ?? "").trim() || " "),
     { pooling: "mean", normalize: true },
   );
+  lastRealEmbedAt = Date.now();
   return out.tolist();
 }
 

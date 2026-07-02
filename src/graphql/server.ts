@@ -9,7 +9,7 @@ import { GRAPHQL_PORT } from "../config.js";
  * the network (PRD §17 fully local). One shared Memory instance lives for the
  * process lifetime and is injected into every resolver via context.
  */
-export async function startGraphQLServer(opts: { port?: number; projectPath?: string } = {}): Promise<{ port: number; stop: () => void }> {
+export async function startGraphQLServer(opts: { port?: number; projectPath?: string } = {}): Promise<{ port: number; stop: () => Promise<void> }> {
   const memory = await Memory.open(opts.projectPath);
   const yoga = createYoga<{}, GraphQLContext>({
     schema: makeSchema(),
@@ -23,9 +23,14 @@ export async function startGraphQLServer(opts: { port?: number; projectPath?: st
   await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
   return {
     port,
-    stop: () => {
-      server.close();
-      memory.close();
+    // stop() is exported API: the caller's process may keep running afterwards,
+    // so the native Kuzu handle must actually be freed (disposeSafely), not just
+    // the advisory lock (close) — otherwise the store stays locked for other
+    // processes until this one exits. Awaiting server.close() first also keeps
+    // in-flight resolvers from using the Memory after teardown.
+    stop: async () => {
+      await new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+      await memory.disposeSafely();
     },
   };
 }

@@ -136,10 +136,9 @@ export class GraphDB {
 
   /**
    * Release the cross-process lock for a process that is about to exit (CLI
-   * commands, hooks, the GraphQL server's shutdown handler). Every caller must
-   * release the lockfile it acquired in openAt(), otherwise a later open of
-   * the same store (even in the same process, e.g. cross-project search)
-   * would deadlock on the lock.
+   * commands, hooks). Every caller must release the lockfile it acquired in
+   * openAt(), otherwise a later open of the same store (even in the same
+   * process, e.g. cross-project search) would deadlock on the lock.
    *
    * Deliberately does NOT call the native Kuzu teardown (disposeKuzu): the
    * native `closeSync()` calls race the ONNX embedder's background native
@@ -147,10 +146,14 @@ export class GraphDB {
    * one-shot CLI/hook invocation does — open, embed via upsertNode, close),
    * and that race reliably segfaults the whole process. A terminating process
    * does not need the native close: every write is already durable (Kuzu
-   * autocommits per statement) and the OS reclaims the mmap'd file handles on
-   * exit. Only the long-lived MCP server (see MemoryGate in mcp/server.ts)
-   * must free the native handle explicitly via dispose() — it keeps running
-   * and must hand the file back to other processes without exiting.
+   * autocommits per statement) and the OS reclaims the mmap'd file handles —
+   * including Kuzu's own file lock — on exit.
+   *
+   * ONLY valid for a process that exits right after: until then Kuzu's file
+   * lock stays held even though the advisory lock is free. A process that
+   * keeps running (MCP idle release, cross-project loops, GraphQL shutdown)
+   * must instead free the native handle via Memory.disposeSafely(), which
+   * also waits out the embed race window.
    */
   close(): void {
     this.lock.release();

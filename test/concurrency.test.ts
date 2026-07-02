@@ -54,14 +54,17 @@ test("close() releases the lock too (one-shot CLI/hook path, see Issue.md)", { t
   const a = await Memory.openAt(dir);
   await a.repo.upsertNode("Knowledge", { id: "k2", title: "second", content: "hello" });
   a.close();
+  assert.equal(existsSync(join(dir, ".brain.lock")), false, "lockfile removed after close()");
 
-  // A second open of the same store must succeed (close() releases the lock
-  // just like dispose() — it just skips the native Kuzu teardown, which is
-  // only safe for a process that is about to exit; see GraphDB.close docs).
+  // close() leaves a's native handle open (only safe for a process about to
+  // exit; see GraphDB.close docs). Free it before reopening so the read below
+  // goes through a single live handle — two concurrently-live instances don't
+  // guarantee cross-visibility (see the re-entrant test above).
+  a.dispose();
   const b = await Memory.openAt(dir);
   const node = await b.repo.getNode("Knowledge", "k2");
   assert.equal(node?.title, "second", "data persisted and store reopened");
   b.dispose();
 
-  assert.equal(existsSync(join(dir, ".brain.lock")), false, "lockfile removed after close()");
+  assert.equal(existsSync(join(dir, ".brain.lock")), false, "lockfile removed after dispose()");
 });
