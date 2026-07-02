@@ -139,7 +139,7 @@ export function installProcessGuards(): void {
  */
 export async function createMcpServer(projectPath?: string): Promise<McpServer> {
   const server = new McpServer(
-    { name: "the-brain", version: "0.1.0" },
+    { name: "the-brain", version: "0.1.2" },
     {
       instructions:
         "Persistent project memory. Call memory_context at the start of a task to load " +
