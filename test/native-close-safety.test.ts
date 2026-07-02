@@ -7,7 +7,8 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * Regression tests for Issue.md: a native Kuzu close within ~0–100 ms of a
+ * Regression tests for the MCP-server crash fixed in PR #18: a native Kuzu
+ * close within ~0–100 ms of a
  * real ONNX embedding call segfaults the whole process (SIGSEGV). Two paths
  * used to hit it:
  *

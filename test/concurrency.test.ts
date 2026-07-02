@@ -50,7 +50,7 @@ test("many sequential open/dispose cycles stay stable", { timeout: 30000 }, asyn
   assert.ok(true, "no crash across repeated open/dispose");
 });
 
-test("close() releases the lock too (one-shot CLI/hook path, see Issue.md)", { timeout: 15000 }, async () => {
+test("close() releases the lock too (one-shot CLI/hook path, see PR #18)", { timeout: 15000 }, async () => {
   const a = await Memory.openAt(dir);
   await a.repo.upsertNode("Knowledge", { id: "k2", title: "second", content: "hello" });
   a.close();
