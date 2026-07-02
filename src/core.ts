@@ -99,11 +99,12 @@ export class Memory {
     return backupDatabase(this.db.storageDir, destDir, stamp, passphrase);
   }
 
+  /** Release the lock for a process that is about to exit (CLI, hooks, GraphQL shutdown). See GraphDB.close. */
   close(): void {
     this.db.close();
   }
 
-  /** Really release the database file lock (for long-lived processes; see GraphDB.dispose). */
+  /** Free the native Kuzu handle + lock for a long-lived process (the MCP server). See GraphDB.dispose. */
   dispose(): void {
     this.db.dispose();
   }

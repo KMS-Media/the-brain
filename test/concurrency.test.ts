@@ -49,3 +49,19 @@ test("many sequential open/dispose cycles stay stable", { timeout: 30000 }, asyn
   }
   assert.ok(true, "no crash across repeated open/dispose");
 });
+
+test("close() releases the lock too (one-shot CLI/hook path, see Issue.md)", { timeout: 15000 }, async () => {
+  const a = await Memory.openAt(dir);
+  await a.repo.upsertNode("Knowledge", { id: "k2", title: "second", content: "hello" });
+  a.close();
+
+  // A second open of the same store must succeed (close() releases the lock
+  // just like dispose() — it just skips the native Kuzu teardown, which is
+  // only safe for a process that is about to exit; see GraphDB.close docs).
+  const b = await Memory.openAt(dir);
+  const node = await b.repo.getNode("Knowledge", "k2");
+  assert.equal(node?.title, "second", "data persisted and store reopened");
+  b.dispose();
+
+  assert.equal(existsSync(join(dir, ".brain.lock")), false, "lockfile removed after close()");
+});
