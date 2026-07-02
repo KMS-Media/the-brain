@@ -77,11 +77,15 @@ export class MemoryGate {
     await done;
   }
 
-  private release(): void {
+  private async release(): Promise<void> {
     const memory = this.memory;
     this.memory = null;
     try {
-      memory?.dispose();
+      // disposeSafely (not dispose): the idle window is user-tunable down to
+      // ~0ms via BRAIN_MCP_IDLE_MS, and a native Kuzu close right after an
+      // embedding write segfaults the process — the safety delay keeps the
+      // teardown out of that window regardless of the configured idleMs.
+      await memory?.disposeSafely();
     } catch {
       // Native teardown may throw; the lock is released inside dispose() regardless.
     }

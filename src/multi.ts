@@ -57,7 +57,11 @@ export async function searchAcrossProjects(query: string, limit = 20, home?: str
       const hits = await mem.search(query, limit);
       for (const h of hits) all.push({ ...h, project: p.name });
     } finally {
-      mem.close();
+      // This loop runs inside a still-living process, so each store's native
+      // handle (buffer pool, Kuzu's own file lock) must be freed here — the
+      // exit-only close() would keep every visited store locked and resident
+      // until the process dies.
+      await mem.disposeSafely();
     }
   }
   all.sort((a, b) => b.score - a.score);
@@ -100,7 +104,7 @@ export async function transferNode(
   try {
     node = await src.repo.getNode(label, id);
   } finally {
-    src.close();
+    await src.disposeSafely();
   }
   if (!node) throw new Error(`Node ${label}:${id} not found in project "${from.name}".`);
 
@@ -114,7 +118,7 @@ export async function transferNode(
     const { id: newId } = await dst.repo.upsertNode(label, props);
     return { from: from.name, to: to.name, label, sourceId: id, newId };
   } finally {
-    dst.close();
+    await dst.disposeSafely();
   }
 }
 

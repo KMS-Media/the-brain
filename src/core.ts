@@ -1,9 +1,17 @@
 import { GraphDB } from "./db/kuzu.js";
 import { Repository } from "./db/repo.js";
+import { lastRealEmbedTime } from "./embeddings/embedder.js";
 import { SearchEngine } from "./retrieval/search.js";
 import { buildContext } from "./retrieval/contextBuilder.js";
 import { backupDatabase, type BackupResult } from "./backup.js";
 import type { MemoryContext, NodeLabel, ScoredNode } from "./types.js";
+
+/**
+ * Safety margin between the last real (native ONNX) embedding call and a
+ * native Kuzu close. Empirically the segfault race fires at 0–20 ms and was
+ * once observed near 100 ms; 250 ms is comfortably past every observed crash.
+ */
+const EMBED_NATIVE_CLOSE_SAFETY_MS = 250;
 
 /**
  * The Memory facade. Every interface (MCP tools, GraphQL resolvers, CLI, the
@@ -99,12 +107,29 @@ export class Memory {
     return backupDatabase(this.db.storageDir, destDir, stamp, passphrase);
   }
 
+  /** Release the lock for a process that is about to exit (CLI commands, hooks). See GraphDB.close. */
   close(): void {
     this.db.close();
   }
 
-  /** Really release the database file lock (for long-lived processes; see GraphDB.dispose). */
+  /** Free the native Kuzu handle + lock immediately. Prefer disposeSafely() unless the last embed is known to be long past. */
   dispose(): void {
     this.db.dispose();
+  }
+
+  /**
+   * Free the native Kuzu handle + lock from a process that keeps running
+   * (MCP idle release, cross-project loops, GraphQL shutdown).
+   *
+   * Kuzu's native close, invoked within ~0–100 ms of a real ONNX embedding
+   * call, races the embedder's background native cleanup and segfaults the
+   * whole process (see GraphDB.close). This waits out that window relative to
+   * the last real embed before tearing down; with no recent embed it disposes
+   * immediately.
+   */
+  async disposeSafely(): Promise<void> {
+    const wait = EMBED_NATIVE_CLOSE_SAFETY_MS - (Date.now() - lastRealEmbedTime());
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    this.dispose();
   }
 }

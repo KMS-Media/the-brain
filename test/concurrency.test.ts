@@ -49,3 +49,22 @@ test("many sequential open/dispose cycles stay stable", { timeout: 30000 }, asyn
   }
   assert.ok(true, "no crash across repeated open/dispose");
 });
+
+test("close() releases the lock too (one-shot CLI/hook path, see Issue.md)", { timeout: 15000 }, async () => {
+  const a = await Memory.openAt(dir);
+  await a.repo.upsertNode("Knowledge", { id: "k2", title: "second", content: "hello" });
+  a.close();
+  assert.equal(existsSync(join(dir, ".brain.lock")), false, "lockfile removed after close()");
+
+  // close() leaves a's native handle open (only safe for a process about to
+  // exit; see GraphDB.close docs). Free it before reopening so the read below
+  // goes through a single live handle — two concurrently-live instances don't
+  // guarantee cross-visibility (see the re-entrant test above).
+  a.dispose();
+  const b = await Memory.openAt(dir);
+  const node = await b.repo.getNode("Knowledge", "k2");
+  assert.equal(node?.title, "second", "data persisted and store reopened");
+  b.dispose();
+
+  assert.equal(existsSync(join(dir, ".brain.lock")), false, "lockfile removed after dispose()");
+});
