@@ -221,3 +221,28 @@ When a LLM is active, **both** sources are combined for each text: the marker
 heuristic **and** the LLM extraction. Results are deduplicated via the stable
 ID — the LLM only adds additional coverage; it never overwrites anything.
 Behaviour without a LLM remains fully deterministic.
+
+---
+
+## 4. Optional: one daemon serving multiple clients
+
+By default the diagram in section 1 runs once **per MCP client process** —
+each client (Claude Code, another tool, the CLI) spawns its own copy of the
+server and its own database handle, cooperating through a lockfile. If you run
+several at once against the same project, there's an alternative: **one**
+shared daemon process holds the database, and each client runs a thin proxy
+(the "shim") in front of it instead of the full server.
+
+```
+   Client A ── shim ──┐
+   Client B ── shim ──┼──► one shared daemon ──► the graph DB
+   Client C ── shim ──┘      (Streamable HTTP)
+```
+
+The practical difference you'd notice: clients stop waiting on each other's
+lock, and if the daemon has a bad moment, a client's *own* connection stays up
+— a tool call just comes back as an error once, instead of the client's whole
+memory connection dropping. This is opt-in and experimental; see
+[DEVELOPER.md](./DEVELOPER.md#optional-shared-mcp-daemon-experimental) for
+setup and [INSTALL.md](./INSTALL.md#advanced-shared-mcp-daemon) for the
+guided version (`./scripts/install.sh`).

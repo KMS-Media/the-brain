@@ -62,6 +62,10 @@ npm run build          # compiles to dist/
 The first run downloads the embedding model (~30 MB) into `~/.claude-memory/models`
 and caches it. Set `BRAIN_OFFLINE=1` afterwards to forbid any network access.
 
+Or run `./scripts/install.sh` — it does the above and then interactively wires
+the plugin into Claude Code (see [INSTALL.md](./INSTALL.md)) and optionally sets
+up the shared daemon below as a background service.
+
 ## Use as a Claude Code plugin
 
 The repo is a ready Claude Code plugin:
@@ -73,14 +77,15 @@ The repo is a ready Claude Code plugin:
     last assistant turn is scanned for ADR/FINDING/LEARNED/RULE/NOTE markers and
     persisted (PRD §14). Stable ids make this idempotent; recurring review
     findings accumulate `frequency` (PRD §13).
-- `.mcp.json` — registers the `the-brain` MCP server (10 tools)
+- `.mcp.json` — registers the `the-brain` MCP server (13 tools)
 
 After `npm run build`, point Claude Code at this directory as a plugin. The MCP
 tools and the prompt hook become available automatically.
 
 **MCP tools:** `memory_context`, `memory_search`, `memory_component`,
 `remember_decision`, `remember_experience`, `remember_review_finding`,
-`remember_knowledge`, `remember_standard`, `ingest_repository`, `learn_from_text`.
+`remember_knowledge`, `remember_standard`, `ingest_repository`, `ingest_github`,
+`curate_memory`, `consolidate_memory`, `learn_from_text`.
 
 ## Use from the CLI
 
@@ -251,6 +256,9 @@ started with) — routing one daemon across multiple projects is not
 implemented. `.mcp.json` in this repo still points at the direct stdio server;
 switching it over is a separate, deliberate rollout step.
 
+`./scripts/install.sh` automates the launchd/systemd setup above (it prompts
+before writing anything) — see [INSTALL.md](./INSTALL.md#advanced-shared-mcp-daemon).
+
 ## Data model
 
 11 node types (Project, Component, File, Directory, GitCommit, Knowledge,
@@ -283,7 +291,8 @@ maintenance per insert) — it only pays off at millions of nodes.
 ```bash
 npm test    # core round-trips, semantic search, prioritization, component
             # traversal, ranking, extractor, ingest, auto-learning hook,
-            # intent analysis, finding-merge, backup/restore, multi-project
+            # intent analysis, finding-merge, backup/restore, multi-project,
+            # daemon/shim crash recovery + multi-client concurrency
 ```
 
 ## Security (PRD §17)
