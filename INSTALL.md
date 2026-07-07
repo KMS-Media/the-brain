@@ -35,6 +35,12 @@ npm run build
 > pwd     # e.g. /Users/you/projects/the-brain
 > ```
 
+> **Fastest path:** run `./scripts/install.sh` after Step 1 — it runs the build
+> above, then walks you through Step 2 (asking before it touches anything
+> outside this repo) and optionally sets up the [shared daemon](#advanced-shared-mcp-daemon).
+> The steps below are what it automates, for anyone who wants to do it by hand
+> or understand what the script does.
+
 ---
 
 ## Step 2 — Load it into Claude Code
@@ -155,6 +161,27 @@ More commands and options: [README.md](./README.md). Architecture & internals:
 
 ---
 
+## Advanced: shared MCP daemon
+
+If you run **more than one** MCP client against the same project at once (e.g.
+Claude Code and another tool, or several Claude Code sessions), each one
+normally spawns its own copy of the server, and they hand a lock back and
+forth. An optional alternative: one shared background **daemon** owns the
+store, and each client instead runs a thin **shim**. This also means a crash
+in the daemon can't take a client's connection down with it — see
+[DEVELOPER.md](./DEVELOPER.md#optional-shared-mcp-daemon-experimental) for how
+it works.
+
+`./scripts/install.sh` offers to set this up for you (as a `launchd` agent on
+macOS or a `systemd --user` service on Linux). To do it by hand, see the
+plist/unit examples in DEVELOPER.md and then point each client's MCP config at
+`dist/mcp/shim.js` instead of `dist/mcp/server.js`.
+
+This is experimental and off by default — the plain setup in Step 2 above
+works fine for a single client.
+
+---
+
 ## Troubleshooting
 
 | Problem | Fix |
@@ -165,6 +192,7 @@ More commands and options: [README.md](./README.md). Architecture & internals:
 | First call is slow | One-time model download; fast afterwards. Use `BRAIN_OFFLINE=1` to forbid later downloads |
 | Install scripts blocked | Allow scripts for `kuzu`, `onnxruntime-node`, `sharp` and re-run `npm install` |
 | MCP doesn't start after an update (Way B) | Rebuild + `/plugin marketplace update the-brain-marketplace` |
+| `./scripts/install.sh` fails on `claude mcp`/`claude plugin` | `claude` CLI not on `PATH`, or too old — update Claude Code, or use Way A instead |
 
 ---
 
@@ -173,4 +201,7 @@ More commands and options: [README.md](./README.md). Architecture & internals:
 - **Way A:** just start without `--plugin-dir`.
 - **Way B:** `/plugin uninstall the_brain@the-brain-marketplace`
 - **Way C:** `claude mcp remove the-brain` and remove the hook block from `settings.json`.
+- **Shared daemon, if set up:** macOS —
+  `launchctl unload ~/Library/LaunchAgents/com.the-brain.daemon.plist && rm ~/Library/LaunchAgents/com.the-brain.daemon.plist`;
+  Linux — `systemctl --user disable --now the-brain-daemon.service && rm ~/.config/systemd/user/the-brain-daemon.service`.
 - **Delete the data:** remove the project folder under `~/.claude-memory/`.

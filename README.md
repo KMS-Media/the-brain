@@ -38,6 +38,10 @@ cd the-brain
 # 2. Install and build
 npm install
 npm run build
+
+# 3. (Optional) run the interactive installer — walks you through wiring it
+#    into Claude Code and asks before touching anything outside this folder
+./scripts/install.sh
 ```
 
 The first run downloads a small embedding model (~30 MB) once and caches it
@@ -125,6 +129,10 @@ captures it automatically:
 - **VS Code** — a companion extension lives in [`extension/`](./extension/README.md).
 - **Use your own local LLM** (e.g. [Ollama](https://ollama.com)) for richer
   knowledge extraction — set `BRAIN_LLM_URL=http://localhost:11434/v1`.
+- **Multiple MCP clients on one project** (e.g. Claude Code + another tool at
+  once) — an optional shared daemon avoids lock contention between them and
+  survives crashes without dropping any client's connection. See
+  [INSTALL.md](./INSTALL.md#advanced-shared-mcp-daemon).
 
 ---
 

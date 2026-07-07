@@ -134,25 +134,13 @@ export function installProcessGuards(): void {
 }
 
 /**
- * MCP server — the primary Claude Code integration surface.
+ * Register the-brain's tool set on an already-constructed McpServer, routing
+ * every DB-touching call through the given (already-constructed) MemoryGate.
  *
- * CRITICAL: stdio transport reserves stdout for JSON-RPC. All diagnostics MUST
- * go to stderr (console.error), never console.log.
- *
- * Concurrency: Kuzu permits only one read-write process per database file, so
- * the server must release the database (and its cross-process lockfile) when it
- * is not actively serving a call — otherwise the prompt hooks and the `brain`
- * CLI (separate processes) fail with a lock error.
- *
- * It must NOT, however, open and close the native Kuzu handle on every single
- * call: Kuzu's native destructors can `abort()` during close (see
- * GraphDB.dispose), and an abort is a hard process termination that no JS
- * try/catch can intercept — repeated per-call teardown was crashing the server
- * and dropping the MCP connection. Instead `MemoryGate` keeps ONE Memory open,
- * serializes calls through it, and releases it only after a short idle window
- * (BRAIN_MCP_IDLE_MS, default 3s). Bursts of tool calls reuse a single handle
- * (no churn), and the lock is still handed back to hooks/CLI when the session
- * goes quiet. `GraphDB.openAt` retries on brief lock contention.
+ * Split out from {@link createMcpServer} so the MCP daemon (`daemon.ts`) can
+ * build a fresh, cheap McpServer per session while sharing ONE long-lived
+ * MemoryGate/Kuzu handle across every session — mirrors how the stdio server
+ * shares one gate across every tool call.
  *
  * Tools:
  *   memory_context · memory_search · memory_component        (read)
@@ -161,27 +149,12 @@ export function installProcessGuards(): void {
  *   ingest_repository · ingest_github                        (write)
  *   curate_memory · consolidate_memory                       (maintenance)
  */
-export async function createMcpServer(projectPath?: string): Promise<McpServer> {
-  const server = new McpServer(
-    { name: "the-brain", version: "0.1.2" },
-    {
-      instructions:
-        "Persistent project memory. Call memory_context at the start of a task to load " +
-        "relevant decisions, review findings, standards and experiences. Use the remember_* " +
-        "tools to persist new knowledge so future sessions benefit.",
-    },
-  );
-
+export function registerTools(server: McpServer, gate: MemoryGate, projectPath?: string): void {
   const text = (value: unknown) => ({ content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] });
-
-  // Serialize every tool call through a single, idle-released Memory handle.
-  const gate = new MemoryGate(() => Memory.open(projectPath));
   const withMemory =
     (label: string) =>
     <T>(fn: (m: Memory) => Promise<T>): Promise<T> =>
       gate.run(fn, label);
-
-  logBreadcrumb("server_start", { pid: process.pid, projectPath: projectPath ?? process.cwd() });
 
   server.registerTool(
     "memory_context",
@@ -362,7 +335,49 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
         return text(await learn(memory, t, { useLLM: isLLMEnabled() }));
       }),
   );
+}
 
+/**
+ * MCP server — the primary Claude Code integration surface, run directly over
+ * stdio: one process per client, one Memory handle per process.
+ *
+ * CRITICAL: stdio transport reserves stdout for JSON-RPC. All diagnostics MUST
+ * go to stderr (console.error), never console.log.
+ *
+ * Concurrency: Kuzu permits only one read-write process per database file, so
+ * the server must release the database (and its cross-process lockfile) when it
+ * is not actively serving a call — otherwise the prompt hooks and the `brain`
+ * CLI (separate processes) fail with a lock error.
+ *
+ * It must NOT, however, open and close the native Kuzu handle on every single
+ * call: Kuzu's native destructors can `abort()` during close (see
+ * GraphDB.dispose), and an abort is a hard process termination that no JS
+ * try/catch can intercept — repeated per-call teardown was crashing the server
+ * and dropping the MCP connection. Instead `MemoryGate` keeps ONE Memory open,
+ * serializes calls through it, and releases it only after a short idle window
+ * (BRAIN_MCP_IDLE_MS, default 3s). Bursts of tool calls reuse a single handle
+ * (no churn), and the lock is still handed back to hooks/CLI when the session
+ * goes quiet. `GraphDB.openAt` retries on brief lock contention.
+ *
+ * When multiple client processes each run their own copy of this server against
+ * the same store, they only coexist cooperatively (via the cross-process
+ * `.brain.lock`, one writer at a time) — see `daemon.ts` for a single shared
+ * process that removes that contention entirely.
+ */
+export async function createMcpServer(projectPath?: string): Promise<McpServer> {
+  const server = new McpServer(
+    { name: "the-brain", version: "0.1.2" },
+    {
+      instructions:
+        "Persistent project memory. Call memory_context at the start of a task to load " +
+        "relevant decisions, review findings, standards and experiences. Use the remember_* " +
+        "tools to persist new knowledge so future sessions benefit.",
+    },
+  );
+  // One handle per process, shared by every tool call this process serves.
+  const gate = new MemoryGate(() => Memory.open(projectPath));
+  logBreadcrumb("server_start", { pid: process.pid, projectPath: projectPath ?? process.cwd() });
+  registerTools(server, gate, projectPath);
   return server;
 }
 
