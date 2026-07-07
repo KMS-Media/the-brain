@@ -183,6 +183,73 @@ mutation { rememberReviewFinding(rule: "...", severity: "high", fix: "...") { id
 | `BRAIN_LLM_URL` | – | local OpenAI-compatible endpoint → LLM-augmented extraction |
 | `BRAIN_LLM_MODEL` | `llama3.2` | model name for the local LLM |
 | `BRAIN_MAX_DB_SIZE` | `4 GiB` | per-store max DB size (mmap reservation) |
+| `BRAIN_DAEMON_PORT` | `8934` | port the optional shared MCP daemon listens on |
+| `BRAIN_DAEMON_URL` | `http://127.0.0.1:8934/mcp` | daemon URL the shim connects to |
+
+## Optional: shared MCP daemon (experimental)
+
+By default every MCP client (`.mcp.json`) spawns its own `dist/mcp/server.js`
+process, each with its own Kuzu handle, cooperating only through the
+cross-process `.brain.lock` (see `KNOWN_ISSUES.md`). That's fine for a single
+client, but multiple clients against the same store (e.g. Claude Code *and*
+OpenCode *and* the CLI, all open at once) pay lock-wait latency handing the
+store back and forth, and a crash in any one of them can leave that client's
+own tools deregistered until it reconnects.
+
+`src/mcp/daemon.ts` + `src/mcp/shim.ts` are an alternative topology: **one**
+long-lived daemon process owns the store (over Streamable HTTP), and each
+client instead launches a thin **shim** that proxies to it. The shim holds no
+native handles at all, so a daemon crash never touches the client-facing
+stdio connection — a failed call comes back as a normal tool error, and the
+shim transparently reconnects (and re-initializes a session) once the daemon
+is reachable again. See the docstrings in both files for the session/failure
+model; `test/mcp-daemon-shim.test.ts` is the regression test for the crash
+recovery behavior specifically.
+
+The daemon is meant to be **externally supervised** (it does not self-restart
+or self-elect) — run it as a user service:
+
+```xml
+<!-- macOS: ~/Library/LaunchAgents/com.the-brain.daemon.plist -->
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.the-brain.daemon</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>node</string>
+    <string>/path/to/the_brain/dist/mcp/daemon.js</string>
+  </array>
+  <key>WorkingDirectory</key><string>/path/to/your/project</string>
+  <key>EnvironmentVariables</key><dict>
+    <key>BRAIN_PROJECT_LOCAL</key><string>1</string>
+  </dict>
+  <key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/>
+</dict></plist>
+```
+
+```ini
+# Linux: ~/.config/systemd/user/the-brain-daemon.service
+[Unit]
+Description=the-brain shared MCP daemon
+
+[Service]
+ExecStart=node /path/to/the_brain/dist/mcp/daemon.js
+WorkingDirectory=/path/to/your/project
+Environment=BRAIN_PROJECT_LOCAL=1
+Restart=always
+
+[Install]
+WantedBy=default.target
+```
+
+Then point each client's `.mcp.json` at the shim instead of the direct
+server, e.g. `{"command": "node", "args": ["/path/to/the_brain/dist/mcp/shim.js"]}`.
+One daemon currently serves one project's store (whatever `cwd`/env it was
+started with) — routing one daemon across multiple projects is not
+implemented. `.mcp.json` in this repo still points at the direct stdio server;
+switching it over is a separate, deliberate rollout step.
 
 ## Data model
 
