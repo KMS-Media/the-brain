@@ -27,46 +27,62 @@ import { createShim } from "../src/mcp/shim.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const CHILD_SCRIPT = join(ROOT, "test/fixtures/daemon-child.mjs");
-const PORT = 18961;
 
-let dir: string;
-let daemonChild: ChildProcess | null = null;
+/** Safety-net cleanup for children a test failed to kill itself. */
+const activeChildren = new Set<ChildProcess>();
+const tmpDirs = new Set<string>();
 
-function spawnDaemon(): Promise<ChildProcess> {
-  const child = fork(CHILD_SCRIPT, [dir, String(PORT)], {
+function spawnDaemon(dir: string, port: number): Promise<ChildProcess> {
+  const child = fork(CHILD_SCRIPT, [dir, String(port)], {
     execArgv: ["--import", "tsx"],
     stdio: ["ignore", "ignore", "inherit", "ipc"],
   });
-  daemonChild = child;
+  activeChildren.add(child);
+  child.once("exit", () => activeChildren.delete(child));
   return new Promise((resolve, reject) => {
     child.once("message", () => resolve(child));
     child.once("exit", (code, signal) => reject(new Error(`daemon child exited early (code=${code}, signal=${signal})`)));
   });
 }
 
-function killDaemon(): Promise<void> {
+function killDaemon(child: ChildProcess): Promise<void> {
   return new Promise((resolve) => {
-    if (!daemonChild) return resolve();
-    daemonChild.once("exit", () => resolve());
-    daemonChild.kill("SIGKILL");
-    daemonChild = null;
+    child.once("exit", () => resolve());
+    child.kill("SIGKILL");
   });
 }
 
+function tmpDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  tmpDirs.add(dir);
+  return dir;
+}
+
+/** Connects a fresh shim + fake IDE client pair to the given daemon URL. */
+async function connectShimClient(daemonUrl: string): Promise<Client> {
+  const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+  const shim = createShim(daemonUrl);
+  await shim.connect(serverSide);
+  const client = new Client({ name: "test-ide", version: "1.0" });
+  await client.connect(clientSide);
+  return client;
+}
+
 after(() => {
-  daemonChild?.kill("SIGKILL");
-  if (dir) rmSync(dir, { recursive: true, force: true });
+  for (const child of activeChildren) child.kill("SIGKILL");
+  for (const dir of tmpDirs) rmSync(dir, { recursive: true, force: true });
 });
 
 test(
   "shim survives a daemon crash and recovers once a fresh daemon is reachable",
   { timeout: 60_000 },
   async () => {
-    dir = mkdtempSync(join(tmpdir(), "brain-daemon-shim-"));
-    await spawnDaemon();
+    const dir = tmpDir("brain-daemon-shim-");
+    const port = 18961;
+    let daemonChild = await spawnDaemon(dir, port);
 
     const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
-    const shim = createShim(`http://127.0.0.1:${PORT}/mcp`);
+    const shim = createShim(`http://127.0.0.1:${port}/mcp`);
     await shim.connect(serverSide);
 
     const ideClient = new Client({ name: "test-ide", version: "1.0" });
@@ -79,7 +95,7 @@ test(
     const r1 = await ideClient.callTool({ name: "remember_knowledge", arguments: { title: "before", content: "daemon is up" } });
     assert.equal(r1.isError, undefined, "call succeeds while the daemon is up");
 
-    await killDaemon();
+    await killDaemon(daemonChild);
     await new Promise((r) => setTimeout(r, 300));
 
     // The core guarantee: the local (IDE-facing) transport must still be open,
@@ -89,8 +105,51 @@ test(
     assert.equal(r2.isError, true, "call surfaces as a clean tool error while the daemon is down");
     assert.equal(ideClientClosed, false, "the shim's client-facing transport never closes because the daemon died");
 
-    await spawnDaemon();
+    daemonChild = await spawnDaemon(dir, port);
     const r3 = await ideClient.callTool({ name: "remember_knowledge", arguments: { title: "after", content: "daemon is back" } });
     assert.equal(r3.isError, undefined, "the same shim/client reconnects transparently once the daemon is reachable again");
+
+    await killDaemon(daemonChild);
+  },
+);
+
+test(
+  "one daemon serves multiple concurrent client sessions against the same shared store",
+  { timeout: 60_000 },
+  async () => {
+    const dir = tmpDir("brain-daemon-multi-");
+    const port = 18962;
+    const daemonChild = await spawnDaemon(dir, port);
+    const daemonUrl = `http://127.0.0.1:${port}/mcp`;
+
+    try {
+      // Three independent "IDE clients" (own shim, own InMemoryTransport pair,
+      // own MCP session against the daemon) — the whole point of the daemon
+      // is that these never contend on a cross-process lock the way three
+      // separate `dist/mcp/server.js` processes would.
+      const [clientA, clientB, clientC] = await Promise.all([
+        connectShimClient(daemonUrl),
+        connectShimClient(daemonUrl),
+        connectShimClient(daemonUrl),
+      ]);
+
+      const writes = await Promise.all([
+        clientA.callTool({ name: "remember_knowledge", arguments: { title: "multi-A", content: "written by client A" } }),
+        clientB.callTool({ name: "remember_knowledge", arguments: { title: "multi-B", content: "written by client B" } }),
+        clientC.callTool({ name: "remember_knowledge", arguments: { title: "multi-C", content: "written by client C" } }),
+      ]);
+      for (const [i, r] of writes.entries()) {
+        assert.equal(r.isError, undefined, `concurrent write from client ${i} succeeds`);
+      }
+
+      // All three sessions must be visible through the SAME shared MemoryGate —
+      // read back client B's write through client C's (different) session to
+      // prove it's one store, not three isolated ones.
+      const searchResult = await clientC.callTool({ name: "memory_search", arguments: { query: "written by client B", limit: 5 } });
+      const text = (searchResult.content as Array<{ text?: string }>)[0]?.text ?? "";
+      assert.match(text, /multi-B/, "a write from one session is visible from another session's search");
+    } finally {
+      await killDaemon(daemonChild);
+    }
   },
 );
