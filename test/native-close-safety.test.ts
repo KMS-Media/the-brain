@@ -89,6 +89,29 @@ function gateChildScript(storeDir: string): string {
   `;
 }
 
+/**
+ * Regression for a reported (but not directly reproducible) OpenCode incident,
+ * see KNOWN_ISSUES.md: two `remember_*` calls dispatched in parallel in one
+ * message, immediately followed by a large single write, against a gate tuned
+ * to the same worst-case idleMs=1 as above. This never crashed in ad-hoc
+ * stress testing (8/8 clean at idleMs=1 with even larger payloads over MCP),
+ * but had no persisted regression coverage — this closes that gap.
+ */
+function parallelGateChildScript(storeDir: string): string {
+  return `
+    import { Memory } from ${JSON.stringify(join(ROOT, "src/core.ts"))};
+    import { MemoryGate } from ${JSON.stringify(join(ROOT, "src/mcp/server.ts"))};
+    const gate = new MemoryGate(() => Memory.openAt(${JSON.stringify(storeDir)}), 1);
+    const big = "content long enough to need a real embedding computation. ".repeat(500);
+    await Promise.all([
+      gate.run((m) => m.repo.upsertNode("ReviewFinding", { rule: "parallel A", severity: "medium", frequency: 1 })),
+      gate.run((m) => m.repo.upsertNode("CodingStandard", { name: "parallel B", description: big })),
+    ]);
+    await gate.run((m) => m.repo.upsertNode("Decision", { title: "large follow-up", decision: big }));
+    await new Promise((r) => setTimeout(r, 1500));
+  `;
+}
+
 function runChild(tmpRoot: string, script: string) {
   // The script lives OUTSIDE the store dir so a crash leaves it behind for
   // forensics (the store dir is a Kuzu database, wiped wholesale on cleanup).
@@ -133,6 +156,16 @@ test("MCP MemoryGate: idle release right after an embedding write does not crash
   const tmpRoot = mkdtempSync(join(tmpdir(), "brain-gate-idle-"));
   try {
     assertCleanExitWithRetry(tmpRoot, gateChildScript(join(tmpRoot, "store")));
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test("MCP MemoryGate: two parallel writes plus a large follow-up do not crash", { timeout: 90_000 }, (t) => {
+  if (realEmbedderUnavailable) return t.skip(`real embedder unavailable: ${realEmbedderUnavailable}`);
+  const tmpRoot = mkdtempSync(join(tmpdir(), "brain-gate-parallel-"));
+  try {
+    assertCleanExitWithRetry(tmpRoot, parallelGateChildScript(join(tmpRoot, "store")));
   } finally {
     rmSync(tmpRoot, { recursive: true, force: true });
   }

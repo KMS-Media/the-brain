@@ -9,9 +9,14 @@ import type { MemoryContext, NodeLabel, ScoredNode } from "./types.js";
 /**
  * Safety margin between the last real (native ONNX) embedding call and a
  * native Kuzu close. Empirically the segfault race fires at 0–20 ms and was
- * once observed near 100 ms; 250 ms is comfortably past every observed crash.
+ * once observed near 100 ms. Raised from 250ms to 1000ms (2026-07-07, see
+ * KNOWN_ISSUES.md) after a second/third-hand crash report on the 250ms build
+ * that could not be reproduced under stress testing — this residual race was
+ * already flagged as "mitigated, not eliminated" and never got the extra
+ * margin that was recommended at the time. The added delay only affects the
+ * MCP server's idle-release timer, not any tool-call response.
  */
-const EMBED_NATIVE_CLOSE_SAFETY_MS = 250;
+const EMBED_NATIVE_CLOSE_SAFETY_MS = 1000;
 
 /**
  * The Memory facade. Every interface (MCP tools, GraphQL resolvers, CLI, the
