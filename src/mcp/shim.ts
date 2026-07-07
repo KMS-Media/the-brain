@@ -32,7 +32,7 @@ class DaemonProxy {
   constructor(private readonly daemonUrl: string) {}
 
   private async connect(): Promise<Client> {
-    const client = new Client({ name: "the-brain-shim", version: "0.1.0" });
+    const client = new Client({ name: "the-brain-shim", version: "0.2.0" });
     const transport = new StreamableHTTPClientTransport(new URL(this.daemonUrl));
     await client.connect(transport);
     return client;
@@ -101,7 +101,7 @@ class DaemonProxy {
  * client is never torn down because the daemon had a bad moment.
  */
 export function createShim(daemonUrl: string = DEFAULT_DAEMON_URL): Server {
-  const server = new Server({ name: "the-brain", version: "0.1.0" }, { capabilities: { tools: {} } });
+  const server = new Server({ name: "the-brain", version: "0.2.0" }, { capabilities: { tools: {} } });
   const proxy = new DaemonProxy(daemonUrl);
 
   server.setRequestHandler(ListToolsRequestSchema, () => proxy.listTools());

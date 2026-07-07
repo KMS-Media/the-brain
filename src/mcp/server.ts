@@ -366,7 +366,7 @@ export function registerTools(server: McpServer, gate: MemoryGate, projectPath?:
  */
 export async function createMcpServer(projectPath?: string): Promise<McpServer> {
   const server = new McpServer(
-    { name: "the-brain", version: "0.1.2" },
+    { name: "the-brain", version: "0.2.0" },
     {
       instructions:
         "Persistent project memory. Call memory_context at the start of a task to load " +

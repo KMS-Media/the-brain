@@ -42,7 +42,7 @@ export async function startDaemon(
   const sessions = new Map<string, StreamableHTTPServerTransport>();
 
   async function newSession(): Promise<StreamableHTTPServerTransport> {
-    const server = new McpServer({ name: "the-brain-daemon", version: "0.1.0" });
+    const server = new McpServer({ name: "the-brain-daemon", version: "0.2.0" });
     registerTools(server, gate, projectPath);
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
