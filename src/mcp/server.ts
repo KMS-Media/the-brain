@@ -3,6 +3,19 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { Memory } from "../core.js";
 import { learn } from "../learning/extractor.js";
+import { logBreadcrumb } from "../diagnostics.js";
+
+/**
+ * Free-text fields accept arbitrary user/model input with no natural upper
+ * bound. A pathologically large value (megabytes of text in one field) was a
+ * suspected trigger for a reported MCP crash (see KNOWN_ISSUES.md) — that
+ * exact mechanism could not be reproduced under stress testing, but there is
+ * no legitimate reason a single decision/finding/standard needs more than a
+ * few thousand words, so it is capped defensively rather than left unbounded.
+ */
+const shortText = () => z.string().max(20_000);
+/** learn_from_text scans whole notes/summaries, so it gets a much higher ceiling. */
+const longText = () => z.string().max(200_000);
 
 /** Idle window after the last call before the DB handle (and lockfile) is released. */
 const MCP_IDLE_MS = Math.max(0, Number(process.env.BRAIN_MCP_IDLE_MS) || 3_000);
@@ -36,12 +49,18 @@ export class MemoryGate {
     private readonly idleMs: number = MCP_IDLE_MS,
   ) {}
 
-  run<T>(fn: (m: Memory) => Promise<T>): Promise<T> {
+  run<T>(fn: (m: Memory) => Promise<T>, label = "call"): Promise<T> {
     const result = this.chain.then(async () => {
       this.cancelIdle();
       const memory = this.memory ?? (this.memory = await this.opener());
+      logBreadcrumb("call_start", { label });
       try {
-        return await fn(memory);
+        const out = await fn(memory);
+        logBreadcrumb("call_end", { label });
+        return out;
+      } catch (err) {
+        logBreadcrumb("call_error", { label, error: String((err as Error)?.message ?? err) });
+        throw err;
       } finally {
         this.scheduleIdle();
       }
@@ -80,14 +99,17 @@ export class MemoryGate {
   private async release(): Promise<void> {
     const memory = this.memory;
     this.memory = null;
+    logBreadcrumb("dispose_start");
     try {
       // disposeSafely (not dispose): the idle window is user-tunable down to
       // ~0ms via BRAIN_MCP_IDLE_MS, and a native Kuzu close right after an
       // embedding write segfaults the process — the safety delay keeps the
       // teardown out of that window regardless of the configured idleMs.
       await memory?.disposeSafely();
-    } catch {
+      logBreadcrumb("dispose_end");
+    } catch (err) {
       // Native teardown may throw; the lock is released inside dispose() regardless.
+      logBreadcrumb("dispose_error", { error: String((err as Error)?.message ?? err) });
     }
   }
 }
@@ -103,9 +125,11 @@ export function installProcessGuards(): void {
   guardsInstalled = true;
   process.on("uncaughtException", (err) => {
     console.error("the-brain MCP: uncaughtException (kept alive):", err);
+    logBreadcrumb("uncaughtException", { error: String(err?.message ?? err) });
   });
   process.on("unhandledRejection", (reason) => {
     console.error("the-brain MCP: unhandledRejection (kept alive):", reason);
+    logBreadcrumb("unhandledRejection", { error: String((reason as Error)?.message ?? reason) });
   });
 }
 
@@ -127,7 +151,10 @@ export function installProcessGuards(): void {
  */
 export function registerTools(server: McpServer, gate: MemoryGate, projectPath?: string): void {
   const text = (value: unknown) => ({ content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] });
-  const withMemory = <T>(fn: (m: Memory) => Promise<T>): Promise<T> => gate.run(fn);
+  const withMemory =
+    (label: string) =>
+    <T>(fn: (m: Memory) => Promise<T>): Promise<T> =>
+      gate.run(fn, label);
 
   server.registerTool(
     "memory_context",
@@ -137,7 +164,7 @@ export function registerTools(server: McpServer, gate: MemoryGate, projectPath?:
       inputSchema: { query: z.string().describe("The task or prompt to retrieve context for"), limit: z.number().optional() },
     },
     async ({ query, limit }) =>
-      withMemory(async (memory) => {
+      withMemory("memory_context")(async (memory) => {
         const ctx = await memory.context(query, limit ?? 30);
         return text(ctx.markdown || ctx.summary);
       }),
@@ -151,7 +178,7 @@ export function registerTools(server: McpServer, gate: MemoryGate, projectPath?:
       inputSchema: { query: z.string(), limit: z.number().optional() },
     },
     async ({ query, limit }) =>
-      withMemory(async (memory) => {
+      withMemory("memory_search")(async (memory) => {
         const hits = await memory.search(query, limit ?? 20);
         return text(hits.map((h) => ({ label: h.label, id: h.id, score: Number(h.score.toFixed(3)), ...h.props, embedding: undefined })));
       }),
@@ -164,7 +191,7 @@ export function registerTools(server: McpServer, gate: MemoryGate, projectPath?:
       description: "Return decisions, dependencies, review findings and experiences related to a named component.",
       inputSchema: { name: z.string() },
     },
-    async ({ name }) => withMemory(async (memory) => text(await memory.component(name))),
+    async ({ name }) => withMemory("memory_component")(async (memory) => text(await memory.component(name))),
   );
 
   server.registerTool(
@@ -174,14 +201,16 @@ export function registerTools(server: McpServer, gate: MemoryGate, projectPath?:
       description: "Persist an architecture decision so it is never lost.",
       inputSchema: {
         title: z.string(),
-        decision: z.string(),
-        problem: z.string().optional(),
-        reasoning: z.string().optional(),
-        alternatives: z.string().optional(),
+        decision: shortText(),
+        problem: shortText().optional(),
+        reasoning: shortText().optional(),
+        alternatives: shortText().optional(),
       },
     },
     async (args) =>
-      withMemory(async (memory) => text(await memory.repo.upsertNode("Decision", { ...args, date: new Date().toISOString().slice(0, 10) }))),
+      withMemory("remember_decision")(async (memory) =>
+        text(await memory.repo.upsertNode("Decision", { ...args, date: new Date().toISOString().slice(0, 10) })),
+      ),
   );
 
   server.registerTool(
@@ -189,9 +218,9 @@ export function registerTools(server: McpServer, gate: MemoryGate, projectPath?:
     {
       title: "Remember a learned experience",
       description: "Persist a problem→solution experience for reuse.",
-      inputSchema: { problem: z.string(), solution: z.string(), outcome: z.string().optional(), confidence: z.number().optional() },
+      inputSchema: { problem: shortText(), solution: shortText(), outcome: shortText().optional(), confidence: z.number().optional() },
     },
-    async (args) => withMemory(async (memory) => text(await memory.repo.upsertNode("Experience", args))),
+    async (args) => withMemory("remember_experience")(async (memory) => text(await memory.repo.upsertNode("Experience", args))),
   );
 
   server.registerTool(
@@ -200,14 +229,15 @@ export function registerTools(server: McpServer, gate: MemoryGate, projectPath?:
       title: "Remember a code review finding",
       description: "Persist a review finding so the same mistake is not repeated. These get highest retrieval priority.",
       inputSchema: {
-        rule: z.string(),
+        rule: shortText(),
         severity: z.string().optional(),
         category: z.string().optional(),
-        example: z.string().optional(),
-        fix: z.string().optional(),
+        example: shortText().optional(),
+        fix: shortText().optional(),
       },
     },
-    async (args) => withMemory(async (memory) => text(await memory.repo.upsertNode("ReviewFinding", { frequency: 1, ...args }))),
+    async (args) =>
+      withMemory("remember_review_finding")(async (memory) => text(await memory.repo.upsertNode("ReviewFinding", { frequency: 1, ...args }))),
   );
 
   server.registerTool(
@@ -215,9 +245,9 @@ export function registerTools(server: McpServer, gate: MemoryGate, projectPath?:
     {
       title: "Remember general project knowledge",
       description: "Persist general project knowledge.",
-      inputSchema: { title: z.string(), content: z.string(), tags: z.array(z.string()).optional(), importance: z.number().optional() },
+      inputSchema: { title: z.string(), content: shortText(), tags: z.array(z.string()).optional(), importance: z.number().optional() },
     },
-    async (args) => withMemory(async (memory) => text(await memory.repo.upsertNode("Knowledge", args))),
+    async (args) => withMemory("remember_knowledge")(async (memory) => text(await memory.repo.upsertNode("Knowledge", args))),
   );
 
   server.registerTool(
@@ -225,9 +255,9 @@ export function registerTools(server: McpServer, gate: MemoryGate, projectPath?:
     {
       title: "Remember a coding standard",
       description: "Persist a project coding standard / rule.",
-      inputSchema: { name: z.string(), description: z.string(), examples: z.string().optional() },
+      inputSchema: { name: z.string(), description: shortText(), examples: shortText().optional() },
     },
-    async (args) => withMemory(async (memory) => text(await memory.repo.upsertNode("CodingStandard", args))),
+    async (args) => withMemory("remember_standard")(async (memory) => text(await memory.repo.upsertNode("CodingStandard", args))),
   );
 
   server.registerTool(
@@ -238,7 +268,7 @@ export function registerTools(server: McpServer, gate: MemoryGate, projectPath?:
       inputSchema: { limit: z.number().optional().describe("Max issues/PRs to fetch (default 100)") },
     },
     async ({ limit }) =>
-      withMemory(async (memory) => {
+      withMemory("ingest_github")(async (memory) => {
         const { ingestGitHub } = await import("../github.js");
         return text(await ingestGitHub(memory, { limit, cwd: projectPath }));
       }),
@@ -252,7 +282,7 @@ export function registerTools(server: McpServer, gate: MemoryGate, projectPath?:
       inputSchema: { gitLimit: z.number().optional().describe("How many recent commits to ingest (default 100)") },
     },
     async ({ gitLimit }) =>
-      withMemory(async (memory) => {
+      withMemory("ingest_repository")(async (memory) => {
         const { ingest } = await import("../ingest/index.js");
         return text(await ingest(memory, projectPath, gitLimit ?? 100));
       }),
@@ -269,7 +299,7 @@ export function registerTools(server: McpServer, gate: MemoryGate, projectPath?:
       },
     },
     async ({ dryRun, prune }) =>
-      withMemory(async (memory) => {
+      withMemory("curate_memory")(async (memory) => {
         const { curate } = await import("../curate.js");
         return text(await curate(memory, { dryRun, prune }));
       }),
@@ -286,7 +316,7 @@ export function registerTools(server: McpServer, gate: MemoryGate, projectPath?:
       },
     },
     async ({ threshold, dryRun }) =>
-      withMemory(async (memory) => {
+      withMemory("consolidate_memory")(async (memory) => {
         const { consolidate } = await import("../consolidate.js");
         return text(await consolidate(memory, { threshold, dryRun }));
       }),
@@ -297,10 +327,10 @@ export function registerTools(server: McpServer, gate: MemoryGate, projectPath?:
     {
       title: "Extract and store knowledge from text",
       description: "Scan free text for ADR/FINDING/LEARNED/RULE/NOTE markers and persist any found. Use on review summaries or notes.",
-      inputSchema: { text: z.string() },
+      inputSchema: { text: longText() },
     },
     async ({ text: t }) =>
-      withMemory(async (memory) => {
+      withMemory("learn_from_text")(async (memory) => {
         const { isLLMEnabled } = await import("../llm.js");
         return text(await learn(memory, t, { useLLM: isLLMEnabled() }));
       }),
@@ -346,6 +376,7 @@ export async function createMcpServer(projectPath?: string): Promise<McpServer> 
   );
   // One handle per process, shared by every tool call this process serves.
   const gate = new MemoryGate(() => Memory.open(projectPath));
+  logBreadcrumb("server_start", { pid: process.pid, projectPath: projectPath ?? process.cwd() });
   registerTools(server, gate, projectPath);
   return server;
 }
