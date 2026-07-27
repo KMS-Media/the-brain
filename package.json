@@ -31,6 +31,7 @@
     "graphql-scalars": "^1.23.0",
     "graphql-yoga": "^5.0.0",
     "kuzu": "^0.11.0",
+    "sharp": ">=0.35.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
