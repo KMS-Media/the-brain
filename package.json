@@ -32,7 +32,6 @@
     "graphql-yoga": "^5.0.0",
     "@hono/node-server": ">=2.0.5",
     "kuzu": "^0.11.0",
-    "sharp": ">=0.35.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -50,6 +49,9 @@
   "overrides": {
     "cmake-js": {
       "tar": "^7.5.21"
+    },
+    "@huggingface/transformers": {
+      "sharp": "^0.35.3"
     },
     "adm-zip": "^0.6.0"
   }
