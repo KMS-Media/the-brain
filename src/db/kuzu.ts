@@ -120,9 +120,22 @@ export class GraphDB {
 
   private async collect(result: unknown): Promise<Record<string, unknown>[]> {
     // QueryResult (or array of them for multi-statement). We only ever run one.
-    const r = Array.isArray(result) ? result[result.length - 1] : result;
-    const rows = await (r as { getAll(): Promise<Record<string, unknown>[]> }).getAll();
-    return rows;
+    const all = (Array.isArray(result) ? result : [result]) as { getAll(): Promise<Record<string, unknown>[]>; close?: () => void }[];
+    try {
+      return await all[all.length - 1].getAll();
+    } finally {
+      // Free every native QueryResult NOW. Left to the GC, a result finalized
+      // after Database.closeSync() dereferences freed memory
+      // (~FactorizedTable) and segfaults the process at a random later time —
+      // the root cause of the recurring MCP "Connection closed".
+      for (const r of all) {
+        try {
+          r.close?.();
+        } catch {
+          /* already closed */
+        }
+      }
+    }
   }
 
   /**
