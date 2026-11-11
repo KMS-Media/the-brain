@@ -30,7 +30,7 @@
     "graphql": "^16.9.0",
     "graphql-scalars": "^2.0.1",
     "graphql-yoga": "^6.0.1",
-    "@hono/node-server": ">=2.1.5",
+    "@hono/node-server": ">=2.1.6",
     "kuzu": "^0.11.0",
     "zod": "^4.6.7"
   },
