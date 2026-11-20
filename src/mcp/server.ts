@@ -123,6 +123,13 @@ let guardsInstalled = false;
 export function installProcessGuards(): void {
   if (guardsInstalled) return;
   guardsInstalled = true;
+  for (const stream of [process.stdout, process.stderr]) {
+    stream.on("error", (err: NodeJS.ErrnoException) => {
+      if (err.code !== "EPIPE") throw err;
+      logBreadcrumb("stdio_peer_gone");
+      process.exit(0);
+    });
+  }
   process.on("uncaughtException", (err) => {
     console.error("the-brain MCP: uncaughtException (kept alive):", err);
     logBreadcrumb("uncaughtException", { error: String(err?.message ?? err) });
